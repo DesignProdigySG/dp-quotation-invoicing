@@ -21,6 +21,8 @@ export default async function AppLayout({
           <Link href="/clients">Clients</Link>
           <Link href="/quotes">Quotes</Link>
           <Link href="/invoices">Invoices</Link>
+          <Link href="/review">Needs review</Link>
+          <Link href="/settings">Settings</Link>
         </nav>
         <div className="right">
           <span>{user?.email}</span>

@@ -40,6 +40,14 @@ const styles = StyleSheet.create({
   grandText: { fontWeight: 700, fontSize: 12 },
   notes: { marginTop: 24, fontSize: 9, color: "#6b7280" },
   statusBadge: { fontSize: 9, color: "#6b7280", marginTop: 4 },
+  fxSecondaryRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    width: 200,
+    marginBottom: 4,
+    marginTop: -2,
+  },
+  fxSecondaryText: { fontSize: 8, color: "#9ca3af" },
 });
 
 function money(amount: number, currency: string) {
@@ -51,14 +59,19 @@ export type DocPdfProps = {
   docNumber: string;
   docDate: string;
   dueDate?: string | null;
+  reference?: string | null;
   status: string;
   client: {
     name: string;
     contact_name?: string | null;
     contact_email?: string | null;
+    billing_address?: string | null;
   };
   currency: string;
   gstRate: number;
+  gstApplicable: boolean;
+  exchangeRate?: number | null;
+  displayCurrency: "original" | "sgd";
   lineItems: { description: string; quantity: number; unit_price: number }[];
   notes?: string | null;
 };
@@ -68,16 +81,31 @@ export default function DocumentPdf({
   docNumber,
   docDate,
   dueDate,
+  reference,
   status,
   client,
   currency,
   gstRate,
+  gstApplicable,
+  exchangeRate,
+  displayCurrency,
   lineItems,
   notes,
 }: DocPdfProps) {
   const subtotal = lineItems.reduce((s, li) => s + li.quantity * li.unit_price, 0);
-  const gstAmount = subtotal * (gstRate / 100);
+  const gstAmount = subtotal * ((gstApplicable ? gstRate : 0) / 100);
   const total = subtotal + gstAmount;
+
+  const isForeignCurrency = currency.toUpperCase() !== "SGD";
+  const showDualCurrency = isForeignCurrency && !!exchangeRate;
+  const sgdSubtotal = showDualCurrency ? subtotal * exchangeRate! : 0;
+  const sgdGstAmount = showDualCurrency ? gstAmount * exchangeRate! : 0;
+  const sgdTotal = showDualCurrency ? total * exchangeRate! : 0;
+  const showSgdAsPrimary = showDualCurrency && displayCurrency === "sgd";
+  const primaryCurrency = showSgdAsPrimary ? "SGD" : currency;
+  const displaySubtotal = showSgdAsPrimary ? sgdSubtotal : subtotal;
+  const displayGstAmount = showSgdAsPrimary ? sgdGstAmount : gstAmount;
+  const displayTotal = showSgdAsPrimary ? sgdTotal : total;
 
   return (
     <Document>
@@ -87,6 +115,7 @@ export default function DocumentPdf({
             <Text style={styles.title}>{docType === "QUOTATION" ? "Quotation" : "Invoice"}</Text>
             <Text style={styles.docNumber}>{docNumber}</Text>
             <Text style={styles.statusBadge}>Status: {status}</Text>
+            {reference && <Text style={styles.statusBadge}>Reference: {reference}</Text>}
           </View>
           <View>
             <Text style={styles.label}>Date</Text>
@@ -103,6 +132,9 @@ export default function DocumentPdf({
         <View style={styles.section}>
           <Text style={styles.label}>Bill to</Text>
           <Text style={styles.value}>{client.name}</Text>
+          {client.billing_address && (
+            <Text style={styles.value}>{client.billing_address}</Text>
+          )}
           {client.contact_name && <Text style={styles.value}>{client.contact_name}</Text>}
           {client.contact_email && <Text style={styles.value}>{client.contact_email}</Text>}
         </View>
@@ -127,16 +159,43 @@ export default function DocumentPdf({
         <View style={styles.totalsBlock}>
           <View style={styles.totalsRow}>
             <Text>Subtotal</Text>
-            <Text>{money(subtotal, currency)}</Text>
+            <Text>{money(displaySubtotal, primaryCurrency)}</Text>
           </View>
-          <View style={styles.totalsRow}>
-            <Text>GST ({gstRate}%)</Text>
-            <Text>{money(gstAmount, currency)}</Text>
-          </View>
+          {showDualCurrency && showSgdAsPrimary && (
+            <View style={styles.fxSecondaryRow}>
+              <Text style={styles.fxSecondaryText}>({money(subtotal, currency)})</Text>
+            </View>
+          )}
+          {gstApplicable && (
+            <>
+              <View style={styles.totalsRow}>
+                <Text>GST ({gstRate}%)</Text>
+                <Text>{money(displayGstAmount, primaryCurrency)}</Text>
+              </View>
+              {showDualCurrency && (
+                <View style={styles.fxSecondaryRow}>
+                  <Text style={styles.fxSecondaryText}>
+                    {showSgdAsPrimary
+                      ? `(${money(gstAmount, currency)})`
+                      : `SGD equivalent: ${money(sgdGstAmount, "SGD")}`}
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
           <View style={styles.grandRow}>
             <Text style={styles.grandText}>Total</Text>
-            <Text style={styles.grandText}>{money(total, currency)}</Text>
+            <Text style={styles.grandText}>{money(displayTotal, primaryCurrency)}</Text>
           </View>
+          {showDualCurrency && (
+            <View style={styles.fxSecondaryRow}>
+              <Text style={styles.fxSecondaryText}>
+                {showSgdAsPrimary
+                  ? `(${money(total, currency)})`
+                  : `SGD equivalent: ${money(sgdTotal, "SGD")}`}
+              </Text>
+            </View>
+          )}
         </View>
 
         {notes && (

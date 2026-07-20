@@ -7,6 +7,8 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -14,40 +16,82 @@ export type Database = {
     Tables: {
       clients: {
         Row: {
+          billing_address: string | null
           contact_email: string | null
           contact_name: string | null
           contact_phone: string | null
           created_at: string
           default_currency: string
           default_gst_rate: number
+          display_currency_preference: string
           id: string
           name: string
           owner_id: string
           updated_at: string
         }
         Insert: {
+          billing_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
           default_currency?: string
           default_gst_rate?: number
+          display_currency_preference?: string
           id?: string
           name: string
           owner_id: string
           updated_at?: string
         }
         Update: {
+          billing_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
           default_currency?: string
           default_gst_rate?: number
+          display_currency_preference?: string
           id?: string
           name?: string
           owner_id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      gmail_connections: {
+        Row: {
+          created_at: string
+          email: string
+          last_checked_at: string | null
+          owner_id: string
+          processed_label_id: string | null
+          refresh_token_encrypted: string
+          updated_at: string
+          watched_label_id: string | null
+          watched_label_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          last_checked_at?: string | null
+          owner_id: string
+          processed_label_id?: string | null
+          refresh_token_encrypted: string
+          updated_at?: string
+          watched_label_id?: string | null
+          watched_label_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          last_checked_at?: string | null
+          owner_id?: string
+          processed_label_id?: string | null
+          refresh_token_encrypted?: string
+          updated_at?: string
+          watched_label_id?: string | null
+          watched_label_name?: string | null
         }
         Relationships: []
       }
@@ -91,7 +135,10 @@ export type Database = {
           client_id: string
           created_at: string
           currency: string
+          display_currency: string
           due_date: string | null
+          exchange_rate: number | null
+          gst_applicable: boolean
           gst_rate: number
           id: string
           invoice_date: string
@@ -99,6 +146,7 @@ export type Database = {
           notes: string | null
           owner_id: string
           quotation_id: string | null
+          reference: string | null
           status: string
           updated_at: string
         }
@@ -106,7 +154,10 @@ export type Database = {
           client_id: string
           created_at?: string
           currency?: string
+          display_currency?: string
           due_date?: string | null
+          exchange_rate?: number | null
+          gst_applicable?: boolean
           gst_rate?: number
           id?: string
           invoice_date?: string
@@ -114,6 +165,7 @@ export type Database = {
           notes?: string | null
           owner_id: string
           quotation_id?: string | null
+          reference?: string | null
           status?: string
           updated_at?: string
         }
@@ -121,7 +173,10 @@ export type Database = {
           client_id?: string
           created_at?: string
           currency?: string
+          display_currency?: string
           due_date?: string | null
+          exchange_rate?: number | null
+          gst_applicable?: boolean
           gst_rate?: number
           id?: string
           invoice_date?: string
@@ -129,6 +184,7 @@ export type Database = {
           notes?: string | null
           owner_id?: string
           quotation_id?: string | null
+          reference?: string | null
           status?: string
           updated_at?: string
         }
@@ -189,6 +245,9 @@ export type Database = {
           client_id: string
           created_at: string
           currency: string
+          display_currency: string
+          exchange_rate: number | null
+          gst_applicable: boolean
           gst_rate: number
           id: string
           notes: string | null
@@ -202,6 +261,9 @@ export type Database = {
           client_id: string
           created_at?: string
           currency?: string
+          display_currency?: string
+          exchange_rate?: number | null
+          gst_applicable?: boolean
           gst_rate?: number
           id?: string
           notes?: string | null
@@ -215,6 +277,9 @@ export type Database = {
           client_id?: string
           created_at?: string
           currency?: string
+          display_currency?: string
+          exchange_rate?: number | null
+          gst_applicable?: boolean
           gst_rate?: number
           id?: string
           notes?: string | null
@@ -230,6 +295,53 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unmatched_email_quotes: {
+        Row: {
+          created_at: string
+          id: string
+          owner_id: string
+          parsed_data: Json
+          resolved_at: string | null
+          resolved_quotation_id: string | null
+          sender_email: string
+          sender_name: string | null
+          status: string
+          subject: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_id: string
+          parsed_data: Json
+          resolved_at?: string | null
+          resolved_quotation_id?: string | null
+          sender_email: string
+          sender_name?: string | null
+          status?: string
+          subject?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          parsed_data?: Json
+          resolved_at?: string | null
+          resolved_quotation_id?: string | null
+          sender_email?: string
+          sender_name?: string | null
+          status?: string
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unmatched_email_quotes_resolved_quotation_id_fkey"
+            columns: ["resolved_quotation_id"]
+            isOneToOne: false
+            referencedRelation: "quotations"
             referencedColumns: ["id"]
           },
         ]

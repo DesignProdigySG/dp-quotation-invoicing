@@ -13,7 +13,9 @@ export async function GET(
 
   const { data: quotation, error } = await supabase
     .from("quotations")
-    .select("*, clients(name, contact_name, contact_email), quotation_line_items(*)")
+    .select(
+      "*, clients(name, contact_name, contact_email, billing_address), quotation_line_items(*)"
+    )
     .eq("id", id)
     .single();
 
@@ -34,6 +36,9 @@ export async function GET(
       client: (quotation as any).clients,
       currency: quotation.currency,
       gstRate: quotation.gst_rate,
+      gstApplicable: quotation.gst_applicable,
+      exchangeRate: quotation.exchange_rate,
+      displayCurrency: quotation.display_currency as "original" | "sgd",
       lineItems,
       notes: quotation.notes,
     }) as Parameters<typeof renderToBuffer>[0]

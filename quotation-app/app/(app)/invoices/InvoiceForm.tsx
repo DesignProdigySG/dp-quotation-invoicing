@@ -10,19 +10,32 @@ export default function InvoiceForm({
   invoiceId,
   currency,
   gstRate,
+  gstApplicable,
   initial,
 }: {
   invoiceId: string;
   currency: string;
   gstRate: number;
+  gstApplicable: boolean;
   initial: {
     due_date: string | null;
+    reference: string | null;
+    exchange_rate: number | null;
+    display_currency: "original" | "sgd";
     notes: string;
     line_items: LineItemInput[];
   };
 }) {
   const router = useRouter();
   const [dueDate, setDueDate] = useState(initial.due_date || "");
+  const [reference, setReference] = useState(initial.reference || "");
+  const [warningDismissed, setWarningDismissed] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number | "">(
+    initial.exchange_rate ?? ""
+  );
+  const [displayCurrency, setDisplayCurrency] = useState<"original" | "sgd">(
+    initial.display_currency || "original"
+  );
   const [notes, setNotes] = useState(initial.notes || "");
   const [lineItems, setLineItems] = useState<LineItemInput[]>(
     initial.line_items.length
@@ -44,7 +57,21 @@ export default function InvoiceForm({
     setLineItems((items) => items.filter((_, i) => i !== idx));
   }
 
-  const { subtotal, gstAmount, total } = computeTotals(lineItems, gstRate);
+  const isForeignCurrency = currency.toUpperCase() !== "SGD";
+  const effectiveExchangeRate = exchangeRate === "" ? null : Number(exchangeRate);
+  const { subtotal, gstAmount, total } = computeTotals(
+    lineItems,
+    gstApplicable ? gstRate : 0
+  );
+  const showDualCurrency = isForeignCurrency && !!effectiveExchangeRate;
+  const sgdSubtotal = showDualCurrency ? subtotal * effectiveExchangeRate! : 0;
+  const sgdGstAmount = showDualCurrency ? gstAmount * effectiveExchangeRate! : 0;
+  const sgdTotal = showDualCurrency ? total * effectiveExchangeRate! : 0;
+  const showSgdAsPrimary = showDualCurrency && displayCurrency === "sgd";
+  const primaryCurrency = showSgdAsPrimary ? "SGD" : currency;
+  const displaySubtotal = showSgdAsPrimary ? sgdSubtotal : subtotal;
+  const displayGstAmount = showSgdAsPrimary ? sgdGstAmount : gstAmount;
+  const displayTotal = showSgdAsPrimary ? sgdTotal : total;
 
   async function handleSave() {
     setSaving(true);
@@ -52,6 +79,9 @@ export default function InvoiceForm({
     try {
       await updateInvoice(invoiceId, {
         due_date: dueDate || null,
+        reference: reference || null,
+        exchange_rate: isForeignCurrency ? effectiveExchangeRate : null,
+        display_currency: isForeignCurrency ? displayCurrency : "original",
         notes,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       });
@@ -67,6 +97,20 @@ export default function InvoiceForm({
     <div className="card">
       {error && <div className="error">{error}</div>}
 
+      {!reference && !warningDismissed && (
+        <div className="warning">
+          No reference number set.
+          <button
+            className="btn btn-sm"
+            type="button"
+            onClick={() => setWarningDismissed(true)}
+            style={{ marginLeft: 8 }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="row">
         <div>
           <label htmlFor="due_date">Due date</label>
@@ -78,6 +122,14 @@ export default function InvoiceForm({
           />
         </div>
         <div>
+          <label htmlFor="reference">Reference</label>
+          <input
+            id="reference"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+          />
+        </div>
+        <div>
           <label>Currency</label>
           <input value={currency} disabled />
         </div>
@@ -86,6 +138,35 @@ export default function InvoiceForm({
           <input value={gstRate} disabled />
         </div>
       </div>
+
+      {isForeignCurrency && (
+        <div className="row">
+          <div>
+            <label htmlFor="exchange_rate">Exchange rate (1 {currency} = ? SGD)</label>
+            <input
+              id="exchange_rate"
+              type="number"
+              step="0.0001"
+              value={exchangeRate}
+              onChange={(e) =>
+                setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
+              }
+              placeholder="e.g. 1.34"
+            />
+          </div>
+          <div>
+            <label htmlFor="display_currency">Document shows</label>
+            <select
+              id="display_currency"
+              value={displayCurrency}
+              onChange={(e) => setDisplayCurrency(e.target.value as "original" | "sgd")}
+            >
+              <option value="original">Original currency ({currency})</option>
+              <option value="sgd">SGD equivalent</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       <label>Line items</label>
       <table className="line-items-table">
@@ -143,11 +224,32 @@ export default function InvoiceForm({
       </button>
 
       <div className="totals">
-        <div>Subtotal: {formatMoney(subtotal, currency)}</div>
-        <div>
-          GST ({gstRate}%): {formatMoney(gstAmount, currency)}
-        </div>
-        <div className="grand">Total: {formatMoney(total, currency)}</div>
+        <div>Subtotal: {formatMoney(displaySubtotal, primaryCurrency)}</div>
+        {showDualCurrency && showSgdAsPrimary && (
+          <div className="subtitle">({formatMoney(subtotal, currency)})</div>
+        )}
+        {gstApplicable && (
+          <>
+            <div>
+              GST ({gstRate}%): {formatMoney(displayGstAmount, primaryCurrency)}
+            </div>
+            {showDualCurrency && (
+              <div className="subtitle">
+                {showSgdAsPrimary
+                  ? `(${formatMoney(gstAmount, currency)})`
+                  : `SGD equivalent: ${formatMoney(sgdGstAmount, "SGD")}`}
+              </div>
+            )}
+          </>
+        )}
+        <div className="grand">Total: {formatMoney(displayTotal, primaryCurrency)}</div>
+        {showDualCurrency && (
+          <div className="subtitle">
+            {showSgdAsPrimary
+              ? `(${formatMoney(total, currency)})`
+              : `SGD equivalent: ${formatMoney(sgdTotal, "SGD")}`}
+          </div>
+        )}
       </div>
 
       <label htmlFor="notes">Notes</label>
