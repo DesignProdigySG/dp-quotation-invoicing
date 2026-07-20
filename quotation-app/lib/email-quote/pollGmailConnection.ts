@@ -47,18 +47,23 @@ export async function pollGmailConnection(connection: GmailConnection): Promise<
   oauth2Client.setCredentials({ refresh_token: decrypt(connection.refresh_token_encrypted) });
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-  const query = connection.processed_label_id
-    ? `label:${connection.watched_label_id} -label:${connection.processed_label_id}`
-    : `label:${connection.watched_label_id}`;
+  // Gmail's `q: "label:..."` search syntax expects a label *name*, not the
+  // internal label ID we store — so filtering must go through the `labelIds`
+  // list param (ID-based) instead, with the "already processed" exclusion
+  // checked against each fetched message's own labelIds.
+  const listRes = await gmail.users.messages.list({
+    userId: "me",
+    labelIds: [connection.watched_label_id],
+    maxResults: 25,
+  });
+  const messageRefs = listRes.data.messages || [];
 
-  const listRes = await gmail.users.messages.list({ userId: "me", q: query, maxResults: 25 });
-  const messages = listRes.data.messages || [];
-
+  let processed = 0;
   let matched = 0;
   let unmatched = 0;
   const service = createServiceClient();
 
-  for (const messageRef of messages) {
+  for (const messageRef of messageRefs) {
     if (!messageRef.id) continue;
 
     const messageRes = await gmail.users.messages.get({
@@ -67,6 +72,15 @@ export async function pollGmailConnection(connection: GmailConnection): Promise<
       format: "full",
     });
     const message = messageRes.data;
+
+    if (
+      connection.processed_label_id &&
+      message.labelIds?.includes(connection.processed_label_id)
+    ) {
+      continue;
+    }
+    processed++;
+
     const headers = message.payload?.headers || [];
     const subject = headers.find((h) => h.name === "Subject")?.value || "";
     const from = headers.find((h) => h.name === "From")?.value || "";
@@ -114,5 +128,5 @@ export async function pollGmailConnection(connection: GmailConnection): Promise<
     .update({ last_checked_at: new Date().toISOString() })
     .eq("owner_id", connection.owner_id);
 
-  return { processed: messages.length, matched, unmatched };
+  return { processed, matched, unmatched };
 }
