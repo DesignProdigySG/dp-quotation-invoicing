@@ -234,6 +234,53 @@ export type Database = {
           },
         ]
       }
+      unmatched_email_quotes: {
+        Row: {
+          created_at: string
+          id: string
+          owner_id: string
+          parsed_data: Json
+          resolved_at: string | null
+          resolved_quotation_id: string | null
+          sender_email: string
+          sender_name: string | null
+          status: string
+          subject: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_id: string
+          parsed_data: Json
+          resolved_at?: string | null
+          resolved_quotation_id?: string | null
+          sender_email: string
+          sender_name?: string | null
+          status?: string
+          subject?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          parsed_data?: Json
+          resolved_at?: string | null
+          resolved_quotation_id?: string | null
+          sender_email?: string
+          sender_name?: string | null
+          status?: string
+          subject?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unmatched_email_quotes_resolved_quotation_id_fkey"
+            columns: ["resolved_quotation_id"]
+            isOneToOne: false
+            referencedRelation: "quotations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
