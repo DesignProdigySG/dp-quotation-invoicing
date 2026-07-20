@@ -12,7 +12,7 @@ export default async function ReviewPage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("clients")
-      .select("id, name, default_currency, default_gst_rate")
+      .select("id, name, default_currency, default_gst_rate, display_currency_preference")
       .order("name"),
   ]);
 

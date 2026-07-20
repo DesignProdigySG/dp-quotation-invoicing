@@ -6,6 +6,9 @@ import type { LineItemInput } from "../quotes/actions";
 
 export type InvoiceInput = {
   due_date: string | null;
+  reference?: string | null;
+  exchange_rate?: number | null;
+  display_currency: "original" | "sgd";
   notes?: string;
   line_items: LineItemInput[];
 };
@@ -17,6 +20,9 @@ export async function updateInvoice(id: string, input: InvoiceInput) {
     .from("invoices")
     .update({
       due_date: input.due_date,
+      reference: input.reference || null,
+      exchange_rate: input.exchange_rate ?? null,
+      display_currency: input.display_currency,
       notes: input.notes || null,
     })
     .eq("id", id);

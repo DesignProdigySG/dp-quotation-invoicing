@@ -14,6 +14,9 @@ export type QuotationInput = {
   quote_date: string;
   currency: string;
   gst_rate: number;
+  gst_applicable: boolean;
+  exchange_rate?: number | null;
+  display_currency: "original" | "sgd";
   notes?: string;
   line_items: LineItemInput[];
 };
@@ -33,6 +36,9 @@ export async function createQuotation(input: QuotationInput) {
       quote_date: input.quote_date,
       currency: input.currency,
       gst_rate: input.gst_rate,
+      gst_applicable: input.gst_applicable,
+      exchange_rate: input.exchange_rate ?? null,
+      display_currency: input.display_currency,
       notes: input.notes || null,
     })
     .select()
@@ -68,6 +74,9 @@ export async function updateQuotation(id: string, input: QuotationInput) {
       quote_date: input.quote_date,
       currency: input.currency,
       gst_rate: input.gst_rate,
+      gst_applicable: input.gst_applicable,
+      exchange_rate: input.exchange_rate ?? null,
+      display_currency: input.display_currency,
       notes: input.notes || null,
     })
     .eq("id", id);
@@ -145,6 +154,9 @@ export async function convertQuotationToInvoice(quotationId: string) {
       client_id: quotation.client_id,
       currency: quotation.currency,
       gst_rate: quotation.gst_rate,
+      gst_applicable: quotation.gst_applicable,
+      exchange_rate: quotation.exchange_rate,
+      display_currency: quotation.display_currency,
       notes: quotation.notes,
     })
     .select()

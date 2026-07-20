@@ -11,6 +11,7 @@ type ClientOption = {
   name: string;
   default_currency: string;
   default_gst_rate: number;
+  display_currency_preference: string;
 };
 
 type UnmatchedItem = {
@@ -66,6 +67,13 @@ function ReviewItemCard({
   const [gstRate, setGstRate] = useState(
     clients.find((c) => c.id === clientId)?.default_gst_rate ?? 9
   );
+  const [gstApplicable, setGstApplicable] = useState(true);
+  const [exchangeRate, setExchangeRate] = useState<number | "">("");
+  const [displayCurrency, setDisplayCurrency] = useState<"original" | "sgd">(
+    (clients.find((c) => c.id === clientId)?.display_currency_preference as
+      | "original"
+      | "sgd") || "original"
+  );
   const [notes, setNotes] = useState(parsed.notes || "");
   const [lineItems, setLineItems] = useState<LineItemInput[]>(
     parsed.items && parsed.items.length > 0
@@ -86,6 +94,9 @@ function ReviewItemCard({
     if (c) {
       setCurrency(c.default_currency);
       setGstRate(c.default_gst_rate);
+      setDisplayCurrency(
+        (c.display_currency_preference as "original" | "sgd") || "original"
+      );
     }
   }
 
@@ -103,7 +114,21 @@ function ReviewItemCard({
     setLineItems((items) => items.filter((_, i) => i !== idx));
   }
 
-  const { subtotal, gstAmount, total } = computeTotals(lineItems, gstRate);
+  const isForeignCurrency = currency.toUpperCase() !== "SGD";
+  const effectiveExchangeRate = exchangeRate === "" ? null : Number(exchangeRate);
+  const { subtotal, gstAmount, total } = computeTotals(
+    lineItems,
+    gstApplicable ? gstRate : 0
+  );
+  const showDualCurrency = isForeignCurrency && !!effectiveExchangeRate;
+  const sgdSubtotal = showDualCurrency ? subtotal * effectiveExchangeRate! : 0;
+  const sgdGstAmount = showDualCurrency ? gstAmount * effectiveExchangeRate! : 0;
+  const sgdTotal = showDualCurrency ? total * effectiveExchangeRate! : 0;
+  const showSgdAsPrimary = showDualCurrency && displayCurrency === "sgd";
+  const primaryCurrency = showSgdAsPrimary ? "SGD" : currency;
+  const displaySubtotal = showSgdAsPrimary ? sgdSubtotal : subtotal;
+  const displayGstAmount = showSgdAsPrimary ? sgdGstAmount : gstAmount;
+  const displayTotal = showSgdAsPrimary ? sgdTotal : total;
 
   async function handleCreate() {
     if (!clientId) {
@@ -118,6 +143,9 @@ function ReviewItemCard({
         quote_date: quoteDate,
         currency,
         gst_rate: gstRate,
+        gst_applicable: gstApplicable,
+        exchange_rate: isForeignCurrency ? effectiveExchangeRate : null,
+        display_currency: isForeignCurrency ? displayCurrency : "original",
         notes,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       });
@@ -200,9 +228,48 @@ function ReviewItemCard({
                 step="0.01"
                 value={gstRate}
                 onChange={(e) => setGstRate(Number(e.target.value))}
+                disabled={!gstApplicable}
               />
             </div>
           </div>
+
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={gstApplicable}
+              onChange={(e) => setGstApplicable(e.target.checked)}
+            />
+            Apply GST
+          </label>
+
+          {isForeignCurrency && (
+            <div className="row">
+              <div>
+                <label>Exchange rate (1 {currency} = ? SGD)</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={exchangeRate}
+                  onChange={(e) =>
+                    setExchangeRate(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  placeholder="e.g. 1.34"
+                />
+              </div>
+              <div>
+                <label>Document shows</label>
+                <select
+                  value={displayCurrency}
+                  onChange={(e) =>
+                    setDisplayCurrency(e.target.value as "original" | "sgd")
+                  }
+                >
+                  <option value="original">Original currency ({currency})</option>
+                  <option value="sgd">SGD equivalent</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           <label>Line items</label>
           <table className="line-items-table">
@@ -260,11 +327,32 @@ function ReviewItemCard({
           </button>
 
           <div className="totals">
-            <div>Subtotal: {formatMoney(subtotal, currency)}</div>
-            <div>
-              GST ({gstRate}%): {formatMoney(gstAmount, currency)}
-            </div>
-            <div className="grand">Total: {formatMoney(total, currency)}</div>
+            <div>Subtotal: {formatMoney(displaySubtotal, primaryCurrency)}</div>
+            {showDualCurrency && showSgdAsPrimary && (
+              <div className="subtitle">({formatMoney(subtotal, currency)})</div>
+            )}
+            {gstApplicable && (
+              <>
+                <div>
+                  GST ({gstRate}%): {formatMoney(displayGstAmount, primaryCurrency)}
+                </div>
+                {showDualCurrency && (
+                  <div className="subtitle">
+                    {showSgdAsPrimary
+                      ? `(${formatMoney(gstAmount, currency)})`
+                      : `SGD equivalent: ${formatMoney(sgdGstAmount, "SGD")}`}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="grand">Total: {formatMoney(displayTotal, primaryCurrency)}</div>
+            {showDualCurrency && (
+              <div className="subtitle">
+                {showSgdAsPrimary
+                  ? `(${formatMoney(total, currency)})`
+                  : `SGD equivalent: ${formatMoney(sgdTotal, "SGD")}`}
+              </div>
+            )}
           </div>
 
           <label>Notes</label>

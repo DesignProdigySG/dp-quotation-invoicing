@@ -14,36 +14,42 @@ export type Database = {
     Tables: {
       clients: {
         Row: {
+          billing_address: string | null
           contact_email: string | null
           contact_name: string | null
           contact_phone: string | null
           created_at: string
           default_currency: string
           default_gst_rate: number
+          display_currency_preference: string
           id: string
           name: string
           owner_id: string
           updated_at: string
         }
         Insert: {
+          billing_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
           default_currency?: string
           default_gst_rate?: number
+          display_currency_preference?: string
           id?: string
           name: string
           owner_id: string
           updated_at?: string
         }
         Update: {
+          billing_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
           contact_phone?: string | null
           created_at?: string
           default_currency?: string
           default_gst_rate?: number
+          display_currency_preference?: string
           id?: string
           name?: string
           owner_id?: string
@@ -91,7 +97,10 @@ export type Database = {
           client_id: string
           created_at: string
           currency: string
+          display_currency: string
           due_date: string | null
+          exchange_rate: number | null
+          gst_applicable: boolean
           gst_rate: number
           id: string
           invoice_date: string
@@ -99,6 +108,7 @@ export type Database = {
           notes: string | null
           owner_id: string
           quotation_id: string | null
+          reference: string | null
           status: string
           updated_at: string
         }
@@ -106,7 +116,10 @@ export type Database = {
           client_id: string
           created_at?: string
           currency?: string
+          display_currency?: string
           due_date?: string | null
+          exchange_rate?: number | null
+          gst_applicable?: boolean
           gst_rate?: number
           id?: string
           invoice_date?: string
@@ -114,6 +127,7 @@ export type Database = {
           notes?: string | null
           owner_id: string
           quotation_id?: string | null
+          reference?: string | null
           status?: string
           updated_at?: string
         }
@@ -121,7 +135,10 @@ export type Database = {
           client_id?: string
           created_at?: string
           currency?: string
+          display_currency?: string
           due_date?: string | null
+          exchange_rate?: number | null
+          gst_applicable?: boolean
           gst_rate?: number
           id?: string
           invoice_date?: string
@@ -129,6 +146,7 @@ export type Database = {
           notes?: string | null
           owner_id?: string
           quotation_id?: string | null
+          reference?: string | null
           status?: string
           updated_at?: string
         }
@@ -189,6 +207,9 @@ export type Database = {
           client_id: string
           created_at: string
           currency: string
+          display_currency: string
+          exchange_rate: number | null
+          gst_applicable: boolean
           gst_rate: number
           id: string
           notes: string | null
@@ -202,6 +223,9 @@ export type Database = {
           client_id: string
           created_at?: string
           currency?: string
+          display_currency?: string
+          exchange_rate?: number | null
+          gst_applicable?: boolean
           gst_rate?: number
           id?: string
           notes?: string | null
@@ -215,6 +239,9 @@ export type Database = {
           client_id?: string
           created_at?: string
           currency?: string
+          display_currency?: string
+          exchange_rate?: number | null
+          gst_applicable?: boolean
           gst_rate?: number
           id?: string
           notes?: string | null

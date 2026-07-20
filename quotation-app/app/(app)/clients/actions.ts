@@ -9,8 +9,10 @@ export type ClientInput = {
   contact_name?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;
+  billing_address?: string | null;
   default_currency: string;
   default_gst_rate: number;
+  display_currency_preference: "original" | "sgd";
 };
 
 export async function createClientRecord(input: ClientInput) {

@@ -40,7 +40,8 @@ export default async function InvoiceDetailPage({
           </h1>
           <p className="subtitle">
             {(invoice as any).clients?.name}
-            {invoice.quotation_id ? " · converted from a quotation" : ""}
+            {invoice.quotation_id ? " · converted from a quotation" : ""} · Created{" "}
+            {new Date(invoice.created_at).toLocaleDateString()}
           </p>
         </div>
       </div>
@@ -53,8 +54,12 @@ export default async function InvoiceDetailPage({
         invoiceId={invoice.id}
         currency={invoice.currency}
         gstRate={invoice.gst_rate}
+        gstApplicable={invoice.gst_applicable}
         initial={{
           due_date: invoice.due_date,
+          reference: invoice.reference,
+          exchange_rate: invoice.exchange_rate,
+          display_currency: invoice.display_currency as "original" | "sgd",
           notes: invoice.notes || "",
           line_items: lineItems,
         }}

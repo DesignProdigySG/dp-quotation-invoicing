@@ -14,7 +14,9 @@ export default function ClientForm({
   initial,
 }: {
   clientId?: string;
-  initial?: Partial<ClientInput>;
+  initial?: Partial<Omit<ClientInput, "display_currency_preference">> & {
+    display_currency_preference?: string;
+  };
 }) {
   const router = useRouter();
   type FormState = {
@@ -22,16 +24,21 @@ export default function ClientForm({
     contact_name: string;
     contact_email: string;
     contact_phone: string;
+    billing_address: string;
     default_currency: string;
     default_gst_rate: number;
+    display_currency_preference: "original" | "sgd";
   };
   const [form, setForm] = useState<FormState>({
     name: initial?.name || "",
     contact_name: initial?.contact_name || "",
     contact_email: initial?.contact_email || "",
     contact_phone: initial?.contact_phone || "",
+    billing_address: initial?.billing_address || "",
     default_currency: initial?.default_currency || "SGD",
     default_gst_rate: initial?.default_gst_rate ?? 9,
+    display_currency_preference:
+      (initial?.display_currency_preference as "original" | "sgd") || "original",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +137,31 @@ export default function ClientForm({
           />
         </div>
       </div>
+
+      <label htmlFor="billing_address">Bill-to address</label>
+      <textarea
+        id="billing_address"
+        rows={3}
+        value={form.billing_address}
+        onChange={(e) => setForm({ ...form, billing_address: e.target.value })}
+      />
+
+      <label htmlFor="display_currency_preference">
+        Document currency display (for non-SGD quotes/invoices)
+      </label>
+      <select
+        id="display_currency_preference"
+        value={form.display_currency_preference}
+        onChange={(e) =>
+          setForm({
+            ...form,
+            display_currency_preference: e.target.value as "original" | "sgd",
+          })
+        }
+      >
+        <option value="original">Show original currency</option>
+        <option value="sgd">Show SGD equivalent</option>
+      </select>
 
       <div className="actions" style={{ marginTop: 18 }}>
         <button

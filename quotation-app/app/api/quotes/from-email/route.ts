@@ -36,15 +36,14 @@ export async function POST(request: NextRequest) {
 
   const supabase = createServiceClient();
 
-  if (currency === undefined || gst_rate === undefined) {
-    const { data: client } = await supabase
-      .from("clients")
-      .select("default_currency, default_gst_rate")
-      .eq("id", client_id)
-      .single();
-    currency = currency ?? client?.default_currency;
-    gst_rate = gst_rate ?? client?.default_gst_rate;
-  }
+  const { data: client } = await supabase
+    .from("clients")
+    .select("default_currency, default_gst_rate, display_currency_preference")
+    .eq("id", client_id)
+    .single();
+  currency = currency ?? client?.default_currency;
+  gst_rate = gst_rate ?? client?.default_gst_rate;
+  const display_currency = client?.display_currency_preference;
 
   const { data: quotation, error } = await supabase
     .from("quotations")
@@ -54,6 +53,7 @@ export async function POST(request: NextRequest) {
       notes: notes || null,
       ...(currency !== undefined ? { currency } : {}),
       ...(gst_rate !== undefined ? { gst_rate } : {}),
+      ...(display_currency !== undefined ? { display_currency } : {}),
     })
     .select()
     .single();

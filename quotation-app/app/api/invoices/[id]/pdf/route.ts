@@ -13,7 +13,9 @@ export async function GET(
 
   const { data: invoice, error } = await supabase
     .from("invoices")
-    .select("*, clients(name, contact_name, contact_email), invoice_line_items(*)")
+    .select(
+      "*, clients(name, contact_name, contact_email, billing_address), invoice_line_items(*)"
+    )
     .eq("id", id)
     .single();
 
@@ -31,10 +33,14 @@ export async function GET(
       docNumber: invoice.invoice_number || invoice.id,
       docDate: invoice.invoice_date,
       dueDate: invoice.due_date,
+      reference: invoice.reference,
       status: invoice.status,
       client: (invoice as any).clients,
       currency: invoice.currency,
       gstRate: invoice.gst_rate,
+      gstApplicable: invoice.gst_applicable,
+      exchangeRate: invoice.exchange_rate,
+      displayCurrency: invoice.display_currency as "original" | "sgd",
       lineItems,
       notes: invoice.notes,
     }) as Parameters<typeof renderToBuffer>[0]

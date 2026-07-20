@@ -23,7 +23,7 @@ export default async function QuoteDetailPage({
       .single(),
     supabase
       .from("clients")
-      .select("id, name, default_currency, default_gst_rate")
+      .select("id, name, default_currency, default_gst_rate, display_currency_preference")
       .order("name"),
   ]);
 
@@ -44,6 +44,9 @@ export default async function QuoteDetailPage({
           <h1>
             {quotation.quote_number} <StatusBadge status={quotation.status} />
           </h1>
+          <p className="subtitle">
+            Created {new Date(quotation.created_at).toLocaleDateString()}
+          </p>
         </div>
       </div>
 
@@ -59,6 +62,9 @@ export default async function QuoteDetailPage({
           quote_date: quotation.quote_date,
           currency: quotation.currency,
           gst_rate: quotation.gst_rate,
+          gst_applicable: quotation.gst_applicable,
+          exchange_rate: quotation.exchange_rate,
+          display_currency: quotation.display_currency as "original" | "sgd",
           notes: quotation.notes || "",
           line_items: lineItems,
         }}
