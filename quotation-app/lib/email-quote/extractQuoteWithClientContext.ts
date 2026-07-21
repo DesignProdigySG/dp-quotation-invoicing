@@ -25,7 +25,8 @@ export async function extractQuoteWithClientContext(params: {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-5",
     max_tokens: 1024,
-    temperature: 0,
+    // claude-sonnet-5 rejects an explicit `temperature` override ("deprecated for
+    // this model") — omit it and use the model's default.
     system: BASE_SYSTEM_PROMPT + clientContext,
     messages: [
       {
