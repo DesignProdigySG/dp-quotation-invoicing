@@ -66,8 +66,13 @@ export default function SettingsClient({
     setCheckResult(null);
     try {
       const result = await checkGmailNow();
+      if (result.errors.length > 0) {
+        setError(result.errors.join("; "));
+      }
       setCheckResult(
-        `Checked ${result.processed} email(s): ${result.matched} drafted, ${result.unmatched} sent to review.`
+        `Checked ${result.processed} email(s): ${result.matched} drafted, ${result.unmatched} sent to review${
+          result.failed ? `, ${result.failed} failed` : ""
+        }.`
       );
       router.refresh();
     } catch (e) {

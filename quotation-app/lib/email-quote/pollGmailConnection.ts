@@ -34,13 +34,17 @@ function decodeBody(payload?: GmailMessagePart | null): string {
   return "";
 }
 
-export async function pollGmailConnection(connection: GmailConnection): Promise<{
+export type PollResult = {
   processed: number;
   matched: number;
   unmatched: number;
-}> {
+  failed: number;
+  errors: string[];
+};
+
+export async function pollGmailConnection(connection: GmailConnection): Promise<PollResult> {
   if (!connection.watched_label_id) {
-    return { processed: 0, matched: 0, unmatched: 0 };
+    return { processed: 0, matched: 0, unmatched: 0, failed: 0, errors: [] };
   }
 
   const oauth2Client = getOAuthClient();
@@ -61,65 +65,72 @@ export async function pollGmailConnection(connection: GmailConnection): Promise<
   let processed = 0;
   let matched = 0;
   let unmatched = 0;
+  let failed = 0;
+  const errors: string[] = [];
   const service = createServiceClient();
 
   for (const messageRef of messageRefs) {
     if (!messageRef.id) continue;
 
-    const messageRes = await gmail.users.messages.get({
-      userId: "me",
-      id: messageRef.id,
-      format: "full",
-    });
-    const message = messageRes.data;
-
-    if (
-      connection.processed_label_id &&
-      message.labelIds?.includes(connection.processed_label_id)
-    ) {
-      continue;
-    }
-    processed++;
-
-    const headers = message.payload?.headers || [];
-    const subject = headers.find((h) => h.name === "Subject")?.value || "";
-    const from = headers.find((h) => h.name === "From")?.value || "";
-    const bodyText = decodeBody(message.payload);
-
-    const extracted = await extractQuoteFromEmail({ subject, from, body: bodyText });
-    const client = await matchClient(connection.owner_id, extracted.client_email);
-
-    if (client) {
-      await createQuoteFromEmailData({
-        owner_id: connection.owner_id,
-        client_id: client.id,
-        items: extracted.items.map((item) => ({
-          description: item.description,
-          quantity: item.quantity,
-          unit_price: 0,
-        })),
-        notes: extracted.notes,
-        currency: client.default_currency,
-        gst_rate: client.default_gst_rate,
-      });
-      matched++;
-    } else {
-      await insertUnmatchedQuote({
-        owner_id: connection.owner_id,
-        sender_email: extracted.client_email,
-        sender_name: extracted.client_name ?? null,
-        subject,
-        parsed_data: extracted as unknown as Json,
-      });
-      unmatched++;
-    }
-
-    if (connection.processed_label_id) {
-      await gmail.users.messages.modify({
+    try {
+      const messageRes = await gmail.users.messages.get({
         userId: "me",
         id: messageRef.id,
-        requestBody: { addLabelIds: [connection.processed_label_id] },
+        format: "full",
       });
+      const message = messageRes.data;
+
+      if (
+        connection.processed_label_id &&
+        message.labelIds?.includes(connection.processed_label_id)
+      ) {
+        continue;
+      }
+      processed++;
+
+      const headers = message.payload?.headers || [];
+      const subject = headers.find((h) => h.name === "Subject")?.value || "";
+      const from = headers.find((h) => h.name === "From")?.value || "";
+      const bodyText = decodeBody(message.payload);
+
+      const extracted = await extractQuoteFromEmail({ subject, from, body: bodyText });
+      const client = await matchClient(connection.owner_id, extracted.client_email);
+
+      if (client) {
+        await createQuoteFromEmailData({
+          owner_id: connection.owner_id,
+          client_id: client.id,
+          items: extracted.items.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unit_price: 0,
+          })),
+          notes: extracted.notes,
+          currency: client.default_currency,
+          gst_rate: client.default_gst_rate,
+        });
+        matched++;
+      } else {
+        await insertUnmatchedQuote({
+          owner_id: connection.owner_id,
+          sender_email: extracted.client_email,
+          sender_name: extracted.client_name ?? null,
+          subject,
+          parsed_data: extracted as unknown as Json,
+        });
+        unmatched++;
+      }
+
+      if (connection.processed_label_id) {
+        await gmail.users.messages.modify({
+          userId: "me",
+          id: messageRef.id,
+          requestBody: { addLabelIds: [connection.processed_label_id] },
+        });
+      }
+    } catch (e) {
+      failed++;
+      errors.push(e instanceof Error ? e.message : "Unknown error processing a message");
     }
   }
 
@@ -128,5 +139,5 @@ export async function pollGmailConnection(connection: GmailConnection): Promise<
     .update({ last_checked_at: new Date().toISOString() })
     .eq("owner_id", connection.owner_id);
 
-  return { processed, matched, unmatched };
+  return { processed, matched, unmatched, failed, errors };
 }

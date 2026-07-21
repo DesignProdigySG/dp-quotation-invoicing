@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getOAuthClient } from "@/lib/google/oauthClient";
 import { decrypt } from "@/lib/crypto";
-import { pollGmailConnection } from "@/lib/email-quote/pollGmailConnection";
+import { pollGmailConnection, type PollResult } from "@/lib/email-quote/pollGmailConnection";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -57,18 +57,34 @@ export async function disconnectGmail() {
   revalidatePath("/settings");
 }
 
-export async function checkGmailNow() {
-  const { user } = await requireUser();
-  const service = createServiceClient();
-  const { data: connection, error } = await service
-    .from("gmail_connections")
-    .select("*")
-    .eq("owner_id", user.id)
-    .single();
-  if (error || !connection) throw new Error("Gmail is not connected");
-  if (!connection.watched_label_id) throw new Error("Choose a label to watch first");
+const emptyResult = (message: string): PollResult => ({
+  processed: 0,
+  matched: 0,
+  unmatched: 0,
+  failed: 0,
+  errors: [message],
+});
 
-  const result = await pollGmailConnection(connection);
-  revalidatePath("/settings");
-  return result;
+// Never throws — a thrown error crossing the Server Action boundary gets
+// redacted to a generic "Server Components render" message in production, so
+// failures are always returned as data instead, where the real message
+// reaches the client intact.
+export async function checkGmailNow(): Promise<PollResult> {
+  try {
+    const { user } = await requireUser();
+    const service = createServiceClient();
+    const { data: connection, error } = await service
+      .from("gmail_connections")
+      .select("*")
+      .eq("owner_id", user.id)
+      .single();
+    if (error || !connection) return emptyResult("Gmail is not connected");
+    if (!connection.watched_label_id) return emptyResult("Choose a label to watch first");
+
+    const result = await pollGmailConnection(connection);
+    revalidatePath("/settings");
+    return result;
+  } catch (e) {
+    return emptyResult(e instanceof Error ? e.message : "Unknown error");
+  }
 }
