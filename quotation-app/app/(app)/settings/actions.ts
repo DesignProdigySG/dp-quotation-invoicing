@@ -36,25 +36,42 @@ export async function listGmailLabels() {
     .map((label) => ({ id: label.id as string, name: label.name as string }));
 }
 
-export async function saveWatchedLabel(labelId: string, labelName: string) {
-  const { supabase, user } = await requireUser();
-  const { error } = await supabase
-    .from("gmail_connections")
-    .update({
-      watched_label_id: labelId,
-      watched_label_name: labelName,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("owner_id", user.id);
-  if (error) throw new Error(error.message);
-  revalidatePath("/settings");
+// Both actions below never throw, for the same reason as checkGmailNow: a
+// thrown Server Action error is redacted to a generic message in production,
+// so failures are returned as { error } data instead.
+
+export async function saveWatchedLabel(
+  labelId: string,
+  labelName: string
+): Promise<{ error?: string }> {
+  try {
+    const { supabase, user } = await requireUser();
+    const { error } = await supabase
+      .from("gmail_connections")
+      .update({
+        watched_label_id: labelId,
+        watched_label_name: labelName,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("owner_id", user.id);
+    if (error) return { error: error.message };
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
 }
 
-export async function disconnectGmail() {
-  const { supabase, user } = await requireUser();
-  const { error } = await supabase.from("gmail_connections").delete().eq("owner_id", user.id);
-  if (error) throw new Error(error.message);
-  revalidatePath("/settings");
+export async function disconnectGmail(): Promise<{ error?: string }> {
+  try {
+    const { supabase, user } = await requireUser();
+    const { error } = await supabase.from("gmail_connections").delete().eq("owner_id", user.id);
+    if (error) return { error: error.message };
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
 }
 
 const emptyResult = (message: string): PollResult => ({

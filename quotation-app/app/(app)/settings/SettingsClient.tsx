@@ -37,8 +37,12 @@ export default function SettingsClient({
     setSaving(true);
     setError(null);
     try {
-      await saveWatchedLabel(label.id, label.name);
-      router.refresh();
+      const result = await saveWatchedLabel(label.id, label.name);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        router.refresh();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save label");
     } finally {
@@ -51,8 +55,12 @@ export default function SettingsClient({
     setSaving(true);
     setError(null);
     try {
-      await disconnectGmail();
-      router.refresh();
+      const result = await disconnectGmail();
+      if (result.error) {
+        setError(result.error);
+      } else {
+        router.refresh();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not disconnect");
     } finally {

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listGmailLabels } from "./actions";
 import SettingsClient from "./SettingsClient";
@@ -13,10 +14,14 @@ export default async function SettingsPage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) {
+    redirect("/login");
+  }
+
   const { data: connection } = await supabase
     .from("gmail_connections")
     .select("email, watched_label_id, watched_label_name, last_checked_at")
-    .eq("owner_id", user!.id)
+    .eq("owner_id", user.id)
     .maybeSingle();
 
   let labels: { id: string; name: string }[] = [];
