@@ -7,6 +7,8 @@ export async function insertUnmatchedQuote(input: {
   sender_name?: string | null;
   subject?: string | null;
   parsed_data: Json;
+  suggested_client_id?: string | null;
+  suggested_client_source?: string | null;
 }) {
   const supabase = createServiceClient();
   const { error } = await supabase.from("unmatched_email_quotes").insert({
@@ -15,6 +17,8 @@ export async function insertUnmatchedQuote(input: {
     sender_name: input.sender_name ?? null,
     subject: input.subject ?? null,
     parsed_data: input.parsed_data,
+    suggested_client_id: input.suggested_client_id ?? null,
+    suggested_client_source: input.suggested_client_source ?? null,
   });
 
   if (error) throw new Error(error.message);

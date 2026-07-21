@@ -27,13 +27,16 @@ export async function GET(
     (a: any, b: any) => a.sort_order - b.sort_order
   );
 
+  const resolvedBillingAddress =
+    quotation.billing_address ?? (quotation as any).clients?.billing_address ?? null;
+
   const buffer = await renderToBuffer(
     createElement(DocumentPdf, {
       docType: "QUOTATION",
       docNumber: quotation.quote_number || quotation.id,
       docDate: quotation.quote_date,
       status: quotation.status,
-      client: (quotation as any).clients,
+      client: { ...(quotation as any).clients, billing_address: resolvedBillingAddress },
       currency: quotation.currency,
       gstRate: quotation.gst_rate,
       gstApplicable: quotation.gst_applicable,

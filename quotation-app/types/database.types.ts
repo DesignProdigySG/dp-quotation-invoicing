@@ -14,8 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_billing_addresses: {
+        Row: {
+          address: string
+          client_id: string
+          created_at: string
+          id: string
+          label: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          client_id: string
+          created_at?: string
+          id?: string
+          label: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          label?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_billing_addresses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
+          ai_instructions: string | null
           billing_address: string | null
           contact_email: string | null
           contact_name: string | null
@@ -30,6 +69,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_instructions?: string | null
           billing_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
@@ -44,6 +84,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_instructions?: string | null
           billing_address?: string | null
           contact_email?: string | null
           contact_name?: string | null
@@ -132,6 +173,8 @@ export type Database = {
       }
       invoices: {
         Row: {
+          billing_address: string | null
+          billing_address_id: string | null
           client_id: string
           created_at: string
           currency: string
@@ -151,6 +194,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          billing_address?: string | null
+          billing_address_id?: string | null
           client_id: string
           created_at?: string
           currency?: string
@@ -170,6 +215,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          billing_address?: string | null
+          billing_address_id?: string | null
           client_id?: string
           created_at?: string
           currency?: string
@@ -189,6 +236,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "invoices_billing_address_id_fkey"
+            columns: ["billing_address_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_addresses"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "invoices_client_id_fkey"
             columns: ["client_id"]
@@ -242,6 +296,8 @@ export type Database = {
       }
       quotations: {
         Row: {
+          billing_address: string | null
+          billing_address_id: string | null
           client_id: string
           created_at: string
           currency: string
@@ -258,6 +314,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          billing_address?: string | null
+          billing_address_id?: string | null
           client_id: string
           created_at?: string
           currency?: string
@@ -274,6 +332,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          billing_address?: string | null
+          billing_address_id?: string | null
           client_id?: string
           created_at?: string
           currency?: string
@@ -290,6 +350,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "quotations_billing_address_id_fkey"
+            columns: ["billing_address_id"]
+            isOneToOne: false
+            referencedRelation: "client_billing_addresses"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "quotations_client_id_fkey"
             columns: ["client_id"]
@@ -311,6 +378,8 @@ export type Database = {
           sender_name: string | null
           status: string
           subject: string | null
+          suggested_client_id: string | null
+          suggested_client_source: string | null
         }
         Insert: {
           created_at?: string
@@ -323,6 +392,8 @@ export type Database = {
           sender_name?: string | null
           status?: string
           subject?: string | null
+          suggested_client_id?: string | null
+          suggested_client_source?: string | null
         }
         Update: {
           created_at?: string
@@ -335,6 +406,8 @@ export type Database = {
           sender_name?: string | null
           status?: string
           subject?: string | null
+          suggested_client_id?: string | null
+          suggested_client_source?: string | null
         }
         Relationships: [
           {
@@ -342,6 +415,13 @@ export type Database = {
             columns: ["resolved_quotation_id"]
             isOneToOne: false
             referencedRelation: "quotations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unmatched_email_quotes_suggested_client_id_fkey"
+            columns: ["suggested_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]

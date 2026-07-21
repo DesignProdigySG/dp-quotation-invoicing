@@ -11,15 +11,25 @@ type ClientOption = {
   default_currency: string;
   default_gst_rate: number;
   display_currency_preference: string;
+  billing_address: string | null;
+};
+
+type BillingAddressOption = {
+  id: string;
+  client_id: string;
+  label: string;
+  address: string;
 };
 
 export default function QuoteForm({
   quoteId,
   clients,
+  billingAddresses,
   initial,
 }: {
   quoteId?: string;
   clients: ClientOption[];
+  billingAddresses: BillingAddressOption[];
   initial?: {
     client_id: string;
     quote_date: string;
@@ -28,6 +38,8 @@ export default function QuoteForm({
     gst_applicable: boolean;
     exchange_rate?: number | null;
     display_currency: "original" | "sgd";
+    billing_address_id?: string | null;
+    billing_address?: string | null;
     notes: string;
     line_items: LineItemInput[];
   };
@@ -59,6 +71,12 @@ export default function QuoteForm({
       "original"
   );
   const [notes, setNotes] = useState(initial?.notes || "");
+  const [billingAddressSelection, setBillingAddressSelection] = useState(
+    initial?.billing_address_id ?? (initial?.billing_address ? "__custom__" : "__default__")
+  );
+  const [billingAddressText, setBillingAddressText] = useState(
+    initial?.billing_address ?? clients.find((c) => c.id === clientId)?.billing_address ?? ""
+  );
   const [lineItems, setLineItems] = useState<LineItemInput[]>(
     initial?.line_items?.length
       ? initial.line_items
@@ -77,7 +95,19 @@ export default function QuoteForm({
         setDisplayCurrency(
           (c.display_currency_preference as "original" | "sgd") || "original"
         );
+        setBillingAddressSelection("__default__");
+        setBillingAddressText(c.billing_address || "");
       }
+    }
+  }
+
+  function handleBillingAddressSelect(value: string) {
+    setBillingAddressSelection(value);
+    if (value === "__default__") {
+      setBillingAddressText(clients.find((c) => c.id === clientId)?.billing_address || "");
+    } else if (value !== "__custom__") {
+      const addr = billingAddresses.find((a) => a.id === value);
+      if (addr) setBillingAddressText(addr.address);
     }
   }
 
@@ -123,6 +153,10 @@ export default function QuoteForm({
         gst_applicable: gstApplicable,
         exchange_rate: isForeignCurrency ? effectiveExchangeRate : null,
         display_currency: isForeignCurrency ? displayCurrency : ("original" as const),
+        billing_address_id: billingAddressSelection.startsWith("__")
+          ? null
+          : billingAddressSelection,
+        billing_address: billingAddressText || null,
         notes,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       };
@@ -209,6 +243,28 @@ export default function QuoteForm({
         />
         Apply GST
       </label>
+
+      <label htmlFor="billing_address_select">Bill-to address</label>
+      <select
+        id="billing_address_select"
+        value={billingAddressSelection}
+        onChange={(e) => handleBillingAddressSelect(e.target.value)}
+      >
+        <option value="__default__">Client default</option>
+        {billingAddresses
+          .filter((a) => a.client_id === clientId)
+          .map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.label}
+            </option>
+          ))}
+        <option value="__custom__">Custom…</option>
+      </select>
+      <textarea
+        rows={3}
+        value={billingAddressText}
+        onChange={(e) => setBillingAddressText(e.target.value)}
+      />
 
       {isForeignCurrency && (
         <div className="row">

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveWatchedLabel, disconnectGmail, checkGmailNow } from "./actions";
+import { saveWatchedLabel, disconnectGmail } from "./actions";
+import CheckNowModal from "./CheckNowModal";
 
 type Connection = {
   email: string;
@@ -27,9 +28,8 @@ export default function SettingsClient({
   const router = useRouter();
   const [selectedLabel, setSelectedLabel] = useState(labels[0]?.id || "");
   const [saving, setSaving] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [checkResult, setCheckResult] = useState<string | null>(null);
+  const [showCheckModal, setShowCheckModal] = useState(false);
 
   async function handleSaveLabel() {
     const label = labels.find((l) => l.id === selectedLabel);
@@ -68,28 +68,6 @@ export default function SettingsClient({
     }
   }
 
-  async function handleCheckNow() {
-    setChecking(true);
-    setError(null);
-    setCheckResult(null);
-    try {
-      const result = await checkGmailNow();
-      if (result.errors.length > 0) {
-        setError(result.errors.join("; "));
-      }
-      setCheckResult(
-        `Checked ${result.processed} email(s): ${result.matched} drafted, ${result.unmatched} sent to review${
-          result.failed ? `, ${result.failed} failed` : ""
-        }.`
-      );
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Check failed");
-    } finally {
-      setChecking(false);
-    }
-  }
-
   return (
     <div>
       {connectedNotice && (
@@ -97,7 +75,6 @@ export default function SettingsClient({
       )}
       {errorNotice && <div className="error">{errorNotice}</div>}
       {error && <div className="error">{error}</div>}
-      {checkResult && <div className="notice">{checkResult}</div>}
 
       {!connection && (
         <a className="btn btn-primary" href="/api/auth/gmail/start">
@@ -146,14 +123,24 @@ export default function SettingsClient({
               : "never"}
           </p>
           <div className="actions">
-            <button className="btn btn-primary" disabled={checking} onClick={handleCheckNow}>
-              {checking ? "Checking..." : "Check now"}
+            <button className="btn btn-primary" onClick={() => setShowCheckModal(true)}>
+              Check now
             </button>
             <button className="btn btn-danger" disabled={saving} onClick={handleDisconnect}>
               Disconnect
             </button>
           </div>
         </div>
+      )}
+
+      {showCheckModal && connection && (
+        <CheckNowModal
+          connectionEmail={connection.email}
+          onClose={() => {
+            setShowCheckModal(false);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

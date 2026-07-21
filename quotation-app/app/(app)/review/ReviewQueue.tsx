@@ -12,6 +12,14 @@ type ClientOption = {
   default_currency: string;
   default_gst_rate: number;
   display_currency_preference: string;
+  billing_address: string | null;
+};
+
+type BillingAddressOption = {
+  id: string;
+  client_id: string;
+  label: string;
+  address: string;
 };
 
 type UnmatchedItem = {
@@ -21,6 +29,8 @@ type UnmatchedItem = {
   subject: string | null;
   created_at: string;
   parsed_data: unknown;
+  suggested_client_id: string | null;
+  suggested_client_source: string | null;
 };
 
 type ParsedData = {
@@ -32,9 +42,11 @@ type ParsedData = {
 export default function ReviewQueue({
   items,
   clients,
+  billingAddresses,
 }: {
   items: UnmatchedItem[];
   clients: ClientOption[];
+  billingAddresses: BillingAddressOption[];
 }) {
   if (items.length === 0) {
     return <div className="card empty">Nothing waiting on review right now.</div>;
@@ -43,7 +55,12 @@ export default function ReviewQueue({
   return (
     <div className="review-queue">
       {items.map((item) => (
-        <ReviewItemCard key={item.id} item={item} clients={clients} />
+        <ReviewItemCard
+          key={item.id}
+          item={item}
+          clients={clients}
+          billingAddresses={billingAddresses}
+        />
       ))}
     </div>
   );
@@ -52,14 +69,20 @@ export default function ReviewQueue({
 function ReviewItemCard({
   item,
   clients,
+  billingAddresses,
 }: {
   item: UnmatchedItem;
   clients: ClientOption[];
+  billingAddresses: BillingAddressOption[];
 }) {
   const router = useRouter();
   const parsed = (item.parsed_data || {}) as ParsedData;
 
-  const [clientId, setClientId] = useState(clients[0]?.id || "");
+  const [clientId, setClientId] = useState(
+    (item.suggested_client_id && clients.some((c) => c.id === item.suggested_client_id)
+      ? item.suggested_client_id
+      : clients[0]?.id) || ""
+  );
   const [quoteDate, setQuoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [currency, setCurrency] = useState(
     clients.find((c) => c.id === clientId)?.default_currency || "SGD"
@@ -75,6 +98,10 @@ function ReviewItemCard({
       | "sgd") || "original"
   );
   const [notes, setNotes] = useState(parsed.notes || "");
+  const [billingAddressSelection, setBillingAddressSelection] = useState("__default__");
+  const [billingAddressText, setBillingAddressText] = useState(
+    clients.find((c) => c.id === clientId)?.billing_address || ""
+  );
   const [lineItems, setLineItems] = useState<LineItemInput[]>(
     parsed.items && parsed.items.length > 0
       ? parsed.items.map((li) => ({
@@ -97,6 +124,18 @@ function ReviewItemCard({
       setDisplayCurrency(
         (c.display_currency_preference as "original" | "sgd") || "original"
       );
+      setBillingAddressSelection("__default__");
+      setBillingAddressText(c.billing_address || "");
+    }
+  }
+
+  function handleBillingAddressSelect(value: string) {
+    setBillingAddressSelection(value);
+    if (value === "__default__") {
+      setBillingAddressText(clients.find((c) => c.id === clientId)?.billing_address || "");
+    } else if (value !== "__custom__") {
+      const addr = billingAddresses.find((a) => a.id === value);
+      if (addr) setBillingAddressText(addr.address);
     }
   }
 
@@ -146,6 +185,10 @@ function ReviewItemCard({
         gst_applicable: gstApplicable,
         exchange_rate: isForeignCurrency ? effectiveExchangeRate : null,
         display_currency: isForeignCurrency ? displayCurrency : "original",
+        billing_address_id: billingAddressSelection.startsWith("__")
+          ? null
+          : billingAddressSelection,
+        billing_address: billingAddressText || null,
         notes,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       });
@@ -208,6 +251,13 @@ function ReviewItemCard({
                   </option>
                 ))}
               </select>
+              {item.suggested_client_id === clientId && item.suggested_client_source && (
+                <p className="subtitle" style={{ margin: "4px 0 0" }}>
+                  {item.suggested_client_source === "exact_email" && "Matched by email"}
+                  {item.suggested_client_source === "email_domain" && "Matched by domain"}
+                  {item.suggested_client_source === "ai_fuzzy" && "AI best guess"}
+                </p>
+              )}
             </div>
             <div>
               <label>Quote date</label>
@@ -241,6 +291,27 @@ function ReviewItemCard({
             />
             Apply GST
           </label>
+
+          <label>Bill-to address</label>
+          <select
+            value={billingAddressSelection}
+            onChange={(e) => handleBillingAddressSelect(e.target.value)}
+          >
+            <option value="__default__">Client default</option>
+            {billingAddresses
+              .filter((a) => a.client_id === clientId)
+              .map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            <option value="__custom__">Custom…</option>
+          </select>
+          <textarea
+            rows={3}
+            value={billingAddressText}
+            onChange={(e) => setBillingAddressText(e.target.value)}
+          />
 
           {isForeignCurrency && (
             <div className="row">
