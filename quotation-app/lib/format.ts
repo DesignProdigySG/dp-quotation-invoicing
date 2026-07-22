@@ -10,6 +10,28 @@ export function formatMoney(amount: number, currency: string) {
   }
 }
 
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+export function formatDisplayDate(dateString?: string | null): string {
+  if (!dateString) return "";
+  const [year, month, day] = dateString.split("-").map(Number);
+  if (!year || !month || !day) return dateString;
+  return `${String(day).padStart(2, "0")} ${MONTH_NAMES[month - 1]} ${year}`;
+}
+
 export function addDaysToDateString(dateString: string, days: number): string {
   const date = new Date(`${dateString}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);

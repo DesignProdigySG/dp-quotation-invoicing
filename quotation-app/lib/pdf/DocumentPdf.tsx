@@ -3,12 +3,13 @@ import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/render
 import { fontFor, DEFAULT_FONT_FAMILY } from "./fonts";
 import { getLogoDataUri } from "./logo";
 import { BRAND } from "./brand";
+import { formatDisplayDate } from "../format";
 
 const LOGO_DATA_URI = getLogoDataUri();
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 100,
+    paddingTop: 150,
     paddingBottom: 40,
     paddingHorizontal: 40,
     fontSize: 10,
@@ -16,7 +17,7 @@ const styles = StyleSheet.create({
     color: "#1a1d23",
   },
   logoContainer: { position: "absolute", top: 30, left: 40 },
-  logo: { width: 140, height: 40, objectFit: "contain" },
+  logo: { width: 280, height: 80, objectFit: "contain" },
   headerRow: { marginBottom: 20 },
   title: { fontSize: 20, fontWeight: 700 },
   docNumber: { fontSize: 11, color: "#6b7280", marginTop: 4 },
@@ -29,7 +30,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   metaSection: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },
-  metaCol: { width: "47%" },
+  metaColLeft: { width: "58%" },
+  metaColRight: { width: "38%" },
   metaRow: { flexDirection: "row", marginBottom: 8, alignItems: "flex-start" },
   metaLabel: { width: 90, fontSize: 9, color: "#6b7280" },
   metaValue: { flex: 1, fontSize: 9.5, color: "#1a1d23" },
@@ -177,13 +179,12 @@ export default function DocumentPdf({
 
         <View style={styles.headerRow}>
           <Text style={styles.title}>{isQuotation ? "Quotation" : "Invoice"}</Text>
-          <Text style={styles.statusBadge}>Status: {status}</Text>
         </View>
 
         <View style={styles.accentDivider} />
 
         <View style={styles.metaSection}>
-          <View style={styles.metaCol}>
+          <View style={styles.metaColLeft}>
             <MetaRow label={isQuotation ? "Quotation Number" : "Invoice Number"}>
               <Text style={[styles.footerValue, { fontFamily: fontFor(docNumber) }]}>
                 {docNumber}
@@ -219,9 +220,9 @@ export default function DocumentPdf({
             </MetaRow>
           </View>
 
-          <View style={styles.metaCol}>
+          <View style={styles.metaColRight}>
             <MetaRow label="Created Date">
-              <Text style={styles.footerValue}>{docDate}</Text>
+              <Text style={styles.footerValue}>{formatDisplayDate(docDate)}</Text>
             </MetaRow>
             {preparedBy?.name && (
               <MetaRow label="Prepared By">
@@ -237,12 +238,12 @@ export default function DocumentPdf({
             )}
             {isQuotation && validUntil && (
               <MetaRow label="Expiration Date">
-                <Text style={styles.footerValue}>{validUntil}</Text>
+                <Text style={styles.footerValue}>{formatDisplayDate(validUntil)}</Text>
               </MetaRow>
             )}
             {!isQuotation && dueDate && (
               <MetaRow label="Due Date">
-                <Text style={styles.footerValue}>{dueDate}</Text>
+                <Text style={styles.footerValue}>{formatDisplayDate(dueDate)}</Text>
               </MetaRow>
             )}
             {!isQuotation && reference && (
@@ -337,7 +338,7 @@ export default function DocumentPdf({
         )}
 
         {isQuotation ? (
-          <View style={styles.footerSection}>
+          <View style={styles.footerSection} wrap={false}>
             <View style={styles.footerCol}>
               <Text style={styles.footerColTitle}>Quote accepted by:</Text>
               <View style={styles.footerRow}>
@@ -384,13 +385,13 @@ export default function DocumentPdf({
               </View>
               <View style={styles.footerRow}>
                 <Text style={styles.footerLabel}>Date</Text>
-                <Text style={styles.footerValue}>{docDate}</Text>
+                <Text style={styles.footerValue}>{formatDisplayDate(docDate)}</Text>
               </View>
             </View>
           </View>
         ) : (
           preparedBy?.name && (
-            <View style={styles.notes}>
+            <View style={styles.notes} wrap={false}>
               <Text style={styles.label}>Prepared by</Text>
               {preparedBy.signatureDataUri && (
                 <Image style={styles.signature} src={preparedBy.signatureDataUri} />
@@ -399,7 +400,7 @@ export default function DocumentPdf({
                 {preparedBy.name}
                 {preparedBy.title ? `, ${preparedBy.title}` : ""}
               </Text>
-              <Text style={{ marginTop: 4 }}>{docDate}</Text>
+              <Text style={{ marginTop: 4 }}>{formatDisplayDate(docDate)}</Text>
             </View>
           )
         )}
