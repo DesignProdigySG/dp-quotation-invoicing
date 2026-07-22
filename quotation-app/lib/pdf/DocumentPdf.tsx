@@ -85,9 +85,7 @@ const styles = StyleSheet.create({
   footerRow: { marginBottom: 14 },
   footerLabel: { fontSize: 8, textTransform: "uppercase", color: "#6b7280", marginBottom: 3 },
   footerValue: { fontSize: 10 },
-  blankLine: { borderBottomWidth: 1, borderBottomColor: "#9ca3af", height: 16 },
-  blankSignatureLine: { borderBottomWidth: 1, borderBottomColor: "#9ca3af", height: 36 },
-  footerSignatureImage: { width: 110, height: 40, marginBottom: 4, objectFit: "contain" },
+  footerSignatureImage: { width: 110, height: 40, marginTop: 4, objectFit: "contain" },
 });
 
 function money(amount: number, currency: string) {
@@ -343,29 +341,25 @@ export default function DocumentPdf({
               <Text style={styles.footerColTitle}>Quote accepted by:</Text>
               <View style={styles.footerRow}>
                 <Text style={styles.footerLabel}>Signature</Text>
-                <View style={styles.blankSignatureLine} />
               </View>
               <View style={styles.footerRow}>
                 <Text style={styles.footerLabel}>Name</Text>
-                <View style={styles.blankLine} />
               </View>
               <View style={styles.footerRow}>
                 <Text style={styles.footerLabel}>Designation</Text>
-                <View style={styles.blankLine} />
               </View>
               <View style={styles.footerRow}>
                 <Text style={styles.footerLabel}>Date</Text>
-                <View style={styles.blankLine} />
               </View>
             </View>
 
             <View style={styles.footerCol}>
               <Text style={styles.footerColTitle}>Quote prepared by:</Text>
               <View style={styles.footerRow}>
+                <Text style={styles.footerLabel}>Signature</Text>
                 {preparedBy?.signatureDataUri && (
                   <Image style={styles.footerSignatureImage} src={preparedBy.signatureDataUri} />
                 )}
-                <Text style={styles.footerLabel}>Signature</Text>
               </View>
               <View style={styles.footerRow}>
                 <Text style={styles.footerLabel}>Name</Text>
