@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/renderer";
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 10, fontFamily: "Helvetica", color: "#1a1d23" },
@@ -48,6 +48,7 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
   fxSecondaryText: { fontSize: 8, color: "#9ca3af" },
+  signature: { width: 110, height: 44, marginBottom: 6, objectFit: "contain" },
 });
 
 function money(amount: number, currency: string) {
@@ -74,7 +75,11 @@ export type DocPdfProps = {
   displayCurrency: "original" | "sgd";
   lineItems: { description: string; quantity: number; unit_price: number }[];
   notes?: string | null;
-  preparedBy?: { name: string; title?: string | null } | null;
+  preparedBy?: {
+    name: string;
+    title?: string | null;
+    signatureDataUri?: string | null;
+  } | null;
 };
 
 export default function DocumentPdf({
@@ -210,6 +215,9 @@ export default function DocumentPdf({
         {preparedBy?.name && (
           <View style={styles.notes}>
             <Text style={styles.label}>Prepared by</Text>
+            {preparedBy.signatureDataUri && (
+              <Image style={styles.signature} src={preparedBy.signatureDataUri} />
+            )}
             <Text>
               {preparedBy.name}
               {preparedBy.title ? `, ${preparedBy.title}` : ""}

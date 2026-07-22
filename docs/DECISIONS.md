@@ -69,3 +69,12 @@ fully self-contained, no external integration).
 - Surfaced on quotation/invoice PDFs as a "Prepared by" line (`DocumentPdf.tsx`),
   populated by both PDF routes looking up the document's `owner_id` in `profiles`.
   Omitted entirely if the user hasn't set a name.
+- Follow-up: added a signature image upload (PNG/JPG, 2MB cap). Stored in a private
+  Supabase Storage bucket (`signatures`), one fixed key per user
+  (`${owner_id}/signature`, no extension — content-type comes from upload metadata,
+  so re-uploading a different image type cleanly overwrites it via `upsert`). RLS on
+  `storage.objects` restricts read/write/delete to the path's owner, same pattern as
+  every table here. PDF routes fetch a short-lived signed URL server-side, inline the
+  bytes as a base64 data URI (`lib/profile/getSignatureDataUri.ts`), and render it
+  above the "Prepared by" line — avoids depending on a signed URL staying valid for
+  the lifetime of the render.

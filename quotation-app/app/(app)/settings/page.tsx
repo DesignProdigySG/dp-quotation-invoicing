@@ -27,9 +27,17 @@ export default async function SettingsPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, title")
+    .select("full_name, title, signature_path")
     .eq("owner_id", user.id)
     .maybeSingle();
+
+  let signatureUrl: string | null = null;
+  if (profile?.signature_path) {
+    const { data } = await supabase.storage
+      .from("signatures")
+      .createSignedUrl(profile.signature_path, 3600);
+    signatureUrl = data?.signedUrl ?? null;
+  }
 
   let labels: { id: string; name: string }[] = [];
   let labelsError: string | null = null;
@@ -46,7 +54,7 @@ export default async function SettingsPage({
       <div className="card">
         <h2>Your profile</h2>
         <p className="subtitle">Used to sign quotations and invoices you create.</p>
-        <ProfileForm initial={profile || null} />
+        <ProfileForm initial={profile || null} signatureUrl={signatureUrl} />
       </div>
 
       <div className="card">
