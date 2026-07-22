@@ -67,6 +67,7 @@ export type Database = {
           name: string
           owner_id: string
           updated_at: string
+          xero_contact_id: string | null
         }
         Insert: {
           ai_instructions?: string | null
@@ -82,6 +83,7 @@ export type Database = {
           name: string
           owner_id: string
           updated_at?: string
+          xero_contact_id?: string | null
         }
         Update: {
           ai_instructions?: string | null
@@ -97,6 +99,7 @@ export type Database = {
           name?: string
           owner_id?: string
           updated_at?: string
+          xero_contact_id?: string | null
         }
         Relationships: []
       }
@@ -192,6 +195,11 @@ export type Database = {
           reference: string | null
           status: string
           updated_at: string
+          xero_idempotency_key: string | null
+          xero_invoice_id: string | null
+          xero_push_error: string | null
+          xero_pushed_at: string | null
+          xero_status: string | null
         }
         Insert: {
           billing_address?: string | null
@@ -213,6 +221,11 @@ export type Database = {
           reference?: string | null
           status?: string
           updated_at?: string
+          xero_idempotency_key?: string | null
+          xero_invoice_id?: string | null
+          xero_push_error?: string | null
+          xero_pushed_at?: string | null
+          xero_status?: string | null
         }
         Update: {
           billing_address?: string | null
@@ -234,6 +247,11 @@ export type Database = {
           reference?: string | null
           status?: string
           updated_at?: string
+          xero_idempotency_key?: string | null
+          xero_invoice_id?: string | null
+          xero_push_error?: string | null
+          xero_pushed_at?: string | null
+          xero_status?: string | null
         }
         Relationships: [
           {
@@ -455,6 +473,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      xero_connections: {
+        Row: {
+          connected_at: string | null
+          connected_by: string | null
+          default_account_code: string | null
+          gst_tax_rate: number | null
+          gst_tax_type: string | null
+          id: number
+          no_gst_tax_type: string | null
+          refresh_token_encrypted: string | null
+          tenant_id: string | null
+          tenant_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          connected_at?: string | null
+          connected_by?: string | null
+          default_account_code?: string | null
+          gst_tax_rate?: number | null
+          gst_tax_type?: string | null
+          id?: number
+          no_gst_tax_type?: string | null
+          refresh_token_encrypted?: string | null
+          tenant_id?: string | null
+          tenant_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          connected_at?: string | null
+          connected_by?: string | null
+          default_account_code?: string | null
+          gst_tax_rate?: number | null
+          gst_tax_type?: string | null
+          id?: number
+          no_gst_tax_type?: string | null
+          refresh_token_encrypted?: string | null
+          tenant_id?: string | null
+          tenant_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {

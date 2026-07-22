@@ -3,11 +3,17 @@ import { createClient } from "@/lib/supabase/server";
 import { listGmailLabels } from "./actions";
 import SettingsClient from "./SettingsClient";
 import ProfileForm from "./ProfileForm";
+import XeroSettings from "./XeroSettings";
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ gmail_connected?: string; gmail_error?: string }>;
+  searchParams: Promise<{
+    gmail_connected?: string;
+    gmail_error?: string;
+    xero_connected?: string;
+    xero_error?: string;
+  }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -39,6 +45,12 @@ export default async function SettingsPage({
     signatureUrl = data?.signedUrl ?? null;
   }
 
+  const { data: xeroConnection } = await supabase
+    .from("xero_connections")
+    .select("tenant_name, gst_tax_type, gst_tax_rate, no_gst_tax_type, default_account_code")
+    .eq("id", 1)
+    .maybeSingle();
+
   let labels: { id: string; name: string }[] = [];
   let labelsError: string | null = null;
   if (connection && !connection.watched_label_id) {
@@ -69,6 +81,16 @@ export default async function SettingsPage({
           labelsError={labelsError}
           connectedNotice={params.gmail_connected === "1"}
           errorNotice={params.gmail_error || null}
+        />
+      </div>
+
+      <div className="card">
+        <h2>Xero</h2>
+        <p className="subtitle">Push invoices to Design Prodigy's Xero organisation.</p>
+        <XeroSettings
+          connection={xeroConnection || null}
+          connectedNotice={params.xero_connected === "1"}
+          errorNotice={params.xero_error || null}
         />
       </div>
     </>

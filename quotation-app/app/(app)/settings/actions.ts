@@ -18,6 +18,8 @@ import { extractQuoteFromEmail } from "@/lib/email-quote/extractQuoteFromEmail";
 import { extractQuoteWithClientContext } from "@/lib/email-quote/extractQuoteWithClientContext";
 import { insertUnmatchedQuote } from "@/lib/email-quote/insertUnmatchedQuote";
 import type { Json } from "@/types/database.types";
+import { getXeroClientForConnection } from "@/lib/xero/client";
+import { listTaxRates, listAccounts } from "@/lib/xero/settings";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -185,6 +187,84 @@ export async function listUnprocessedGmailCandidates(): Promise<{
     return { candidates };
   } catch (e) {
     return { candidates: [], error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
+export async function listXeroTaxRates(): Promise<{
+  taxRates: { taxType: string; name: string; ratePercent: number }[];
+  error?: string;
+}> {
+  try {
+    await requireUser();
+    const { xero, tenantId } = await getXeroClientForConnection();
+    return { taxRates: await listTaxRates(xero, tenantId) };
+  } catch (e) {
+    return { taxRates: [], error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
+export async function listXeroAccounts(): Promise<{
+  accounts: { code: string; name: string }[];
+  error?: string;
+}> {
+  try {
+    await requireUser();
+    const { xero, tenantId } = await getXeroClientForConnection();
+    return { accounts: await listAccounts(xero, tenantId) };
+  } catch (e) {
+    return { accounts: [], error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
+export type XeroConfigInput = {
+  gst_tax_type: string;
+  gst_tax_rate: number;
+  no_gst_tax_type: string;
+  default_account_code: string;
+};
+
+export async function saveXeroConfig(input: XeroConfigInput): Promise<{ error?: string }> {
+  try {
+    const { supabase } = await requireUser();
+    const { error } = await supabase
+      .from("xero_connections")
+      .update({
+        gst_tax_type: input.gst_tax_type,
+        gst_tax_rate: input.gst_tax_rate,
+        no_gst_tax_type: input.no_gst_tax_type,
+        default_account_code: input.default_account_code,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", 1);
+    if (error) return { error: error.message };
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
+export async function disconnectXero(): Promise<{ error?: string }> {
+  try {
+    const { supabase } = await requireUser();
+    // Keep the row (id=1 singleton) but clear the connection so any saved
+    // tax/account mapping doesn't need to be re-entered if reconnected later.
+    const { error } = await supabase
+      .from("xero_connections")
+      .update({
+        tenant_id: null,
+        tenant_name: null,
+        refresh_token_encrypted: null,
+        connected_by: null,
+        connected_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", 1);
+    if (error) return { error: error.message };
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 
