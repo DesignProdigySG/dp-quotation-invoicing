@@ -78,3 +78,25 @@ fully self-contained, no external integration).
   bytes as a base64 data URI (`lib/profile/getSignatureDataUri.ts`), and render it
   above the "Prepared by" line — avoids depending on a signed URL staying valid for
   the lifetime of the render.
+- Follow-up: PDFs were rendering Japanese/Korean text (e.g. bill-to addresses) as
+  gibberish — `@react-pdf/renderer` defaults to Helvetica, a PDF base-14 font with
+  only Latin-1 glyphs, so it silently substitutes garbage instead of erroring.
+  Fixed by registering Noto Sans JP and Noto Sans KR (`lib/pdf/fonts.ts`, font files
+  vendored under `lib/pdf/fonts/`) and picking a font per text field based on a
+  Unicode-range check of its content — Hangul → Noto Sans KR, kana/kanji → Noto Sans
+  JP, otherwise Helvetica (kept as the default everywhere so existing English
+  documents look unchanged). Applied to every client-/user-supplied text field on
+  the PDF: client name, billing address, contact name, line item descriptions,
+  notes, quote/invoice number, reference, and the "Prepared by" line.
+  Chinese support was explicitly left out (no CN clients yet) — if needed later,
+  add a `NotoSansSC`/`NotoSansTC` registration and a CJK-ideograph branch to
+  `fontFor()`, but note it can't distinguish Chinese from Japanese by codepoint
+  alone (they share the Han block), so it'd need a signal beyond the raw text
+  (e.g. a per-client language field) to pick correctly.
+  Because the route handlers load these fonts from disk at render time (not via a
+  static import), they're invisible to Next.js's default serverless-bundle file
+  tracing — `next.config.mjs` explicitly lists `lib/pdf/fonts/**/*` under
+  `experimental.outputFileTracingIncludes` for both PDF routes so Vercel actually
+  ships the font files with the function. Skipping this is the classic failure mode
+  for this pattern: works locally, 500s (or silently reverts to tofu) in production
+  because the font file isn't in the deployed bundle.

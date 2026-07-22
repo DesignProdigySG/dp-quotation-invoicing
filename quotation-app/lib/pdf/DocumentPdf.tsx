@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/renderer";
+import { fontFor } from "./fonts";
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 10, fontFamily: "Helvetica", color: "#1a1d23" },
@@ -120,9 +121,13 @@ export default function DocumentPdf({
         <View style={styles.headerRow}>
           <View>
             <Text style={styles.title}>{docType === "QUOTATION" ? "Quotation" : "Invoice"}</Text>
-            <Text style={styles.docNumber}>{docNumber}</Text>
+            <Text style={[styles.docNumber, { fontFamily: fontFor(docNumber) }]}>{docNumber}</Text>
             <Text style={styles.statusBadge}>Status: {status}</Text>
-            {reference && <Text style={styles.statusBadge}>Reference: {reference}</Text>}
+            {reference && (
+              <Text style={[styles.statusBadge, { fontFamily: fontFor(reference) }]}>
+                Reference: {reference}
+              </Text>
+            )}
           </View>
           <View>
             <Text style={styles.label}>Date</Text>
@@ -138,11 +143,17 @@ export default function DocumentPdf({
 
         <View style={styles.section}>
           <Text style={styles.label}>Bill to</Text>
-          <Text style={styles.value}>{client.name}</Text>
+          <Text style={[styles.value, { fontFamily: fontFor(client.name) }]}>{client.name}</Text>
           {client.billing_address && (
-            <Text style={styles.value}>{client.billing_address}</Text>
+            <Text style={[styles.value, { fontFamily: fontFor(client.billing_address) }]}>
+              {client.billing_address}
+            </Text>
           )}
-          {client.contact_name && <Text style={styles.value}>{client.contact_name}</Text>}
+          {client.contact_name && (
+            <Text style={[styles.value, { fontFamily: fontFor(client.contact_name) }]}>
+              {client.contact_name}
+            </Text>
+          )}
           {client.contact_email && <Text style={styles.value}>{client.contact_email}</Text>}
         </View>
 
@@ -155,7 +166,9 @@ export default function DocumentPdf({
           </View>
           {lineItems.map((li, idx) => (
             <View style={styles.tableRow} key={idx}>
-              <Text style={styles.colDesc}>{li.description}</Text>
+              <Text style={[styles.colDesc, { fontFamily: fontFor(li.description) }]}>
+                {li.description}
+              </Text>
               <Text style={styles.colQty}>{li.quantity}</Text>
               <Text style={styles.colPrice}>{money(li.unit_price, currency)}</Text>
               <Text style={styles.colTotal}>{money(li.quantity * li.unit_price, currency)}</Text>
@@ -208,7 +221,7 @@ export default function DocumentPdf({
         {notes && (
           <View style={styles.notes}>
             <Text style={styles.label}>Notes</Text>
-            <Text>{notes}</Text>
+            <Text style={{ fontFamily: fontFor(notes) }}>{notes}</Text>
           </View>
         )}
 
@@ -218,7 +231,7 @@ export default function DocumentPdf({
             {preparedBy.signatureDataUri && (
               <Image style={styles.signature} src={preparedBy.signatureDataUri} />
             )}
-            <Text>
+            <Text style={{ fontFamily: fontFor(`${preparedBy.name} ${preparedBy.title || ""}`) }}>
               {preparedBy.name}
               {preparedBy.title ? `, ${preparedBy.title}` : ""}
             </Text>
