@@ -51,6 +51,28 @@ export async function listGmailLabels() {
 // error is redacted to a generic message in production, so failures are
 // returned as { error } data instead.
 
+export type ProfileInput = {
+  full_name: string;
+  title: string;
+};
+
+export async function saveProfile(input: ProfileInput): Promise<{ error?: string }> {
+  try {
+    const { supabase, user } = await requireUser();
+    const { error } = await supabase.from("profiles").upsert({
+      owner_id: user.id,
+      full_name: input.full_name || null,
+      title: input.title || null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return { error: error.message };
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
 export async function saveWatchedLabel(
   labelId: string,
   labelName: string

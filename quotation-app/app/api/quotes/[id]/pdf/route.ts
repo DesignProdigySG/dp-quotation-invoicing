@@ -23,6 +23,12 @@ export async function GET(
     return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
   }
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, title")
+    .eq("owner_id", quotation.owner_id)
+    .maybeSingle();
+
   const lineItems = ((quotation as any).quotation_line_items || []).sort(
     (a: any, b: any) => a.sort_order - b.sort_order
   );
@@ -44,6 +50,7 @@ export async function GET(
       displayCurrency: quotation.display_currency as "original" | "sgd",
       lineItems,
       notes: quotation.notes,
+      preparedBy: profile?.full_name ? { name: profile.full_name, title: profile.title } : null,
     }) as Parameters<typeof renderToBuffer>[0]
   );
 

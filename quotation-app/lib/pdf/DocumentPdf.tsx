@@ -74,6 +74,7 @@ export type DocPdfProps = {
   displayCurrency: "original" | "sgd";
   lineItems: { description: string; quantity: number; unit_price: number }[];
   notes?: string | null;
+  preparedBy?: { name: string; title?: string | null } | null;
 };
 
 export default function DocumentPdf({
@@ -91,6 +92,7 @@ export default function DocumentPdf({
   displayCurrency,
   lineItems,
   notes,
+  preparedBy,
 }: DocPdfProps) {
   const subtotal = lineItems.reduce((s, li) => s + li.quantity * li.unit_price, 0);
   const gstAmount = subtotal * ((gstApplicable ? gstRate : 0) / 100);
@@ -202,6 +204,16 @@ export default function DocumentPdf({
           <View style={styles.notes}>
             <Text style={styles.label}>Notes</Text>
             <Text>{notes}</Text>
+          </View>
+        )}
+
+        {preparedBy?.name && (
+          <View style={styles.notes}>
+            <Text style={styles.label}>Prepared by</Text>
+            <Text>
+              {preparedBy.name}
+              {preparedBy.title ? `, ${preparedBy.title}` : ""}
+            </Text>
           </View>
         )}
       </Page>

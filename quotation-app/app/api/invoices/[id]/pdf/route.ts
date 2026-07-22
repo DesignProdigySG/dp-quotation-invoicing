@@ -23,6 +23,12 @@ export async function GET(
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, title")
+    .eq("owner_id", invoice.owner_id)
+    .maybeSingle();
+
   const lineItems = ((invoice as any).invoice_line_items || []).sort(
     (a: any, b: any) => a.sort_order - b.sort_order
   );
@@ -46,6 +52,7 @@ export async function GET(
       displayCurrency: invoice.display_currency as "original" | "sgd",
       lineItems,
       notes: invoice.notes,
+      preparedBy: profile?.full_name ? { name: profile.full_name, title: profile.title } : null,
     }) as Parameters<typeof renderToBuffer>[0]
   );
 

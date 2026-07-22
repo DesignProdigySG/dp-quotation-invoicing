@@ -54,3 +54,18 @@ inbox-watching logic directly in the Next.js app instead:
 Everything already built for the pipeline (the webhook route's create-quote logic,
 the review queue UI, the `unmatched_email_quotes` table) carries over unchanged —
 only the "what triggers this and how is Gmail connected" layer changes.
+
+## Decision 3: User profiles (name/title on quotes) — first Phase 2 pick
+
+Picked as the first Phase 2 item from HANDOFF.md's ready-to-build list (easiest,
+fully self-contained, no external integration).
+
+- New `profiles` table, one row per user (`owner_id` PK referencing `auth.users`,
+  same shape as `gmail_connections`), holding `full_name` and `title`. RLS: owner
+  can only read/write their own row, matching every other per-user table in this
+  schema.
+- Editable from a new "Your profile" section at the top of Settings
+  (`ProfileForm.tsx` + `saveProfile` action) — upserts on save.
+- Surfaced on quotation/invoice PDFs as a "Prepared by" line (`DocumentPdf.tsx`),
+  populated by both PDF routes looking up the document's `owner_id` in `profiles`.
+  Omitted entirely if the user hasn't set a name.
