@@ -3,20 +3,18 @@ import { Font } from "@react-pdf/renderer";
 
 const fontsDir = path.join(process.cwd(), "lib/pdf/fonts");
 
+// Regular weight only — every field that renders through fontFor() is normal
+// weight in DocumentPdf.tsx (bold is only used for the title and grand total,
+// which are always plain Latin/numeric), so a bold cut would never be loaded.
+// Skipping it halves the font bytes parsed per cold start.
 Font.register({
   family: "NotoSansJP",
-  fonts: [
-    { src: path.join(fontsDir, "NotoSansJP-Regular.woff") },
-    { src: path.join(fontsDir, "NotoSansJP-Bold.woff"), fontWeight: 700 },
-  ],
+  fonts: [{ src: path.join(fontsDir, "NotoSansJP-Regular.woff") }],
 });
 
 Font.register({
   family: "NotoSansKR",
-  fonts: [
-    { src: path.join(fontsDir, "NotoSansKR-Regular.woff") },
-    { src: path.join(fontsDir, "NotoSansKR-Bold.woff"), fontWeight: 700 },
-  ],
+  fonts: [{ src: path.join(fontsDir, "NotoSansKR-Regular.woff") }],
 });
 
 // Hangul syllables + Jamo, checked first since Korean text can otherwise be
