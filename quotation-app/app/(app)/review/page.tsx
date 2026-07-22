@@ -4,7 +4,7 @@ import ReviewQueue from "./ReviewQueue";
 export default async function ReviewPage() {
   const supabase = await createClient();
 
-  const [{ data: pending }, { data: clients }] = await Promise.all([
+  const [{ data: pending }, { data: clients }, { data: billingAddresses }] = await Promise.all([
     supabase
       .from("unmatched_email_quotes")
       .select("*")
@@ -12,8 +12,11 @@ export default async function ReviewPage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("clients")
-      .select("id, name, default_currency, default_gst_rate, display_currency_preference")
+      .select(
+        "id, name, default_currency, default_gst_rate, display_currency_preference, billing_address"
+      )
       .order("name"),
+    supabase.from("client_billing_addresses").select("id, client_id, label, address"),
   ]);
 
   return (
@@ -26,7 +29,11 @@ export default async function ReviewPage() {
           </p>
         </div>
       </div>
-      <ReviewQueue items={pending || []} clients={clients || []} />
+      <ReviewQueue
+        items={pending || []}
+        clients={clients || []}
+        billingAddresses={billingAddresses || []}
+      />
     </>
   );
 }

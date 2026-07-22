@@ -15,7 +15,7 @@ export default async function QuoteDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: quotation }, { data: clients }] = await Promise.all([
+  const [{ data: quotation }, { data: clients }, { data: billingAddresses }] = await Promise.all([
     supabase
       .from("quotations")
       .select("*, quotation_line_items(*)")
@@ -23,8 +23,11 @@ export default async function QuoteDetailPage({
       .single(),
     supabase
       .from("clients")
-      .select("id, name, default_currency, default_gst_rate, display_currency_preference")
+      .select(
+        "id, name, default_currency, default_gst_rate, display_currency_preference, billing_address"
+      )
       .order("name"),
+    supabase.from("client_billing_addresses").select("id, client_id, label, address"),
   ]);
 
   if (!quotation) notFound();
@@ -57,6 +60,7 @@ export default async function QuoteDetailPage({
       <QuoteForm
         quoteId={quotation.id}
         clients={clients || []}
+        billingAddresses={billingAddresses || []}
         initial={{
           client_id: quotation.client_id,
           quote_date: quotation.quote_date,
@@ -65,6 +69,8 @@ export default async function QuoteDetailPage({
           gst_applicable: quotation.gst_applicable,
           exchange_rate: quotation.exchange_rate,
           display_currency: quotation.display_currency as "original" | "sgd",
+          billing_address_id: quotation.billing_address_id,
+          billing_address: quotation.billing_address,
           notes: quotation.notes || "",
           line_items: lineItems,
         }}

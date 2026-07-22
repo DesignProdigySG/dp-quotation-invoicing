@@ -10,6 +10,7 @@ export type ClientInput = {
   contact_email?: string | null;
   contact_phone?: string | null;
   billing_address?: string | null;
+  ai_instructions?: string | null;
   default_currency: string;
   default_gst_rate: number;
   display_currency_preference: "original" | "sgd";

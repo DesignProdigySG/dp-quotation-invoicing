@@ -6,22 +6,30 @@ import { updateInvoice } from "./actions";
 import { formatMoney, computeTotals } from "@/lib/format";
 import type { LineItemInput } from "../quotes/actions";
 
+type BillingAddressOption = { id: string; label: string; address: string };
+
 export default function InvoiceForm({
   invoiceId,
   currency,
   gstRate,
   gstApplicable,
+  clientDefaultBillingAddress,
+  billingAddresses,
   initial,
 }: {
   invoiceId: string;
   currency: string;
   gstRate: number;
   gstApplicable: boolean;
+  clientDefaultBillingAddress: string | null;
+  billingAddresses: BillingAddressOption[];
   initial: {
     due_date: string | null;
     reference: string | null;
     exchange_rate: number | null;
     display_currency: "original" | "sgd";
+    billing_address_id: string | null;
+    billing_address: string | null;
     notes: string;
     line_items: LineItemInput[];
   };
@@ -35,6 +43,12 @@ export default function InvoiceForm({
   );
   const [displayCurrency, setDisplayCurrency] = useState<"original" | "sgd">(
     initial.display_currency || "original"
+  );
+  const [billingAddressSelection, setBillingAddressSelection] = useState(
+    initial.billing_address_id ?? (initial.billing_address ? "__custom__" : "__default__")
+  );
+  const [billingAddressText, setBillingAddressText] = useState(
+    initial.billing_address ?? clientDefaultBillingAddress ?? ""
   );
   const [notes, setNotes] = useState(initial.notes || "");
   const [lineItems, setLineItems] = useState<LineItemInput[]>(
@@ -55,6 +69,16 @@ export default function InvoiceForm({
 
   function removeLine(idx: number) {
     setLineItems((items) => items.filter((_, i) => i !== idx));
+  }
+
+  function handleBillingAddressSelect(value: string) {
+    setBillingAddressSelection(value);
+    if (value === "__default__") {
+      setBillingAddressText(clientDefaultBillingAddress || "");
+    } else if (value !== "__custom__") {
+      const addr = billingAddresses.find((a) => a.id === value);
+      if (addr) setBillingAddressText(addr.address);
+    }
   }
 
   const isForeignCurrency = currency.toUpperCase() !== "SGD";
@@ -82,6 +106,10 @@ export default function InvoiceForm({
         reference: reference || null,
         exchange_rate: isForeignCurrency ? effectiveExchangeRate : null,
         display_currency: isForeignCurrency ? displayCurrency : "original",
+        billing_address_id: billingAddressSelection.startsWith("__")
+          ? null
+          : billingAddressSelection,
+        billing_address: billingAddressText || null,
         notes,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       });
@@ -138,6 +166,26 @@ export default function InvoiceForm({
           <input value={gstRate} disabled />
         </div>
       </div>
+
+      <label htmlFor="billing_address_select">Bill-to address</label>
+      <select
+        id="billing_address_select"
+        value={billingAddressSelection}
+        onChange={(e) => handleBillingAddressSelect(e.target.value)}
+      >
+        <option value="__default__">Client default</option>
+        {billingAddresses.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.label}
+          </option>
+        ))}
+        <option value="__custom__">Custom…</option>
+      </select>
+      <textarea
+        rows={3}
+        value={billingAddressText}
+        onChange={(e) => setBillingAddressText(e.target.value)}
+      />
 
       {isForeignCurrency && (
         <div className="row">

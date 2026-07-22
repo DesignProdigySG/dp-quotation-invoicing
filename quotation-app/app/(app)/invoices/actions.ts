@@ -9,6 +9,8 @@ export type InvoiceInput = {
   reference?: string | null;
   exchange_rate?: number | null;
   display_currency: "original" | "sgd";
+  billing_address_id?: string | null;
+  billing_address?: string | null;
   notes?: string;
   line_items: LineItemInput[];
 };
@@ -23,6 +25,8 @@ export async function updateInvoice(id: string, input: InvoiceInput) {
       reference: input.reference || null,
       exchange_rate: input.exchange_rate ?? null,
       display_currency: input.display_currency,
+      billing_address_id: input.billing_address_id ?? null,
+      billing_address: input.billing_address ?? null,
       notes: input.notes || null,
     })
     .eq("id", id);

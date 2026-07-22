@@ -1,8 +1,12 @@
 import { google } from "googleapis";
 
+// `gmail.labels` only covers managing label *definitions* (create/list/delete a
+// label) — it does NOT allow applying a label to a message. Since we need
+// `messages.modify` to mark processed emails, `gmail.modify` (a superset that
+// also covers label management) is required instead.
 export const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
-  "https://www.googleapis.com/auth/gmail.labels",
+  "https://www.googleapis.com/auth/gmail.modify",
 ];
 
 export function getOAuthClient() {

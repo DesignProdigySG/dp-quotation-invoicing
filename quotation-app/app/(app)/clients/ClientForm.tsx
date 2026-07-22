@@ -25,6 +25,7 @@ export default function ClientForm({
     contact_email: string;
     contact_phone: string;
     billing_address: string;
+    ai_instructions: string;
     default_currency: string;
     default_gst_rate: number;
     display_currency_preference: "original" | "sgd";
@@ -35,6 +36,7 @@ export default function ClientForm({
     contact_email: initial?.contact_email || "",
     contact_phone: initial?.contact_phone || "",
     billing_address: initial?.billing_address || "",
+    ai_instructions: initial?.ai_instructions || "",
     default_currency: initial?.default_currency || "SGD",
     default_gst_rate: initial?.default_gst_rate ?? 9,
     display_currency_preference:
@@ -144,6 +146,17 @@ export default function ClientForm({
         rows={3}
         value={form.billing_address}
         onChange={(e) => setForm({ ...form, billing_address: e.target.value })}
+      />
+
+      <label htmlFor="ai_instructions">
+        AI extraction notes (optional) — quirks the AI should know when reading this
+        client&apos;s emails
+      </label>
+      <textarea
+        id="ai_instructions"
+        rows={3}
+        value={form.ai_instructions}
+        onChange={(e) => setForm({ ...form, ai_instructions: e.target.value })}
       />
 
       <label htmlFor="display_currency_preference">

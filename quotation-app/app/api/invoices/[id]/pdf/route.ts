@@ -27,6 +27,9 @@ export async function GET(
     (a: any, b: any) => a.sort_order - b.sort_order
   );
 
+  const resolvedBillingAddress =
+    invoice.billing_address ?? (invoice as any).clients?.billing_address ?? null;
+
   const buffer = await renderToBuffer(
     createElement(DocumentPdf, {
       docType: "INVOICE",
@@ -35,7 +38,7 @@ export async function GET(
       dueDate: invoice.due_date,
       reference: invoice.reference,
       status: invoice.status,
-      client: (invoice as any).clients,
+      client: { ...(invoice as any).clients, billing_address: resolvedBillingAddress },
       currency: invoice.currency,
       gstRate: invoice.gst_rate,
       gstApplicable: invoice.gst_applicable,
