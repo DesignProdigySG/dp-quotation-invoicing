@@ -215,6 +215,17 @@ live schema/RLS and Xero's official OpenAPI spec directly rather than assuming.
   to the Xero app's scopes (missing from the initial 3-scope setup) — flagged
   and fixed before writing the settings-picker code, not discovered by a
   runtime 403 later.
+- **`accounting.transactions` (the scope initially requested for invoice
+  creation) doesn't exist on this app** — discovered only when the user hit
+  "invalid_scope" directly on Xero's authorize page (i.e. the whole request
+  was rejected before login, not a downstream 403). Xero has migrated newer
+  apps from that broad legacy scope to granular per-resource ones; the
+  correct replacement for "can create invoices" is `accounting.invoices`. If
+  a future scope-related `invalid_scope` error shows up again, check the
+  exact list of scopes actually enabled on developer.xero.com's Configuration
+  tab for this specific app rather than assuming a scope name from Xero's
+  general docs is still valid — scope naming here isn't stable across app
+  vintages.
 - **`invoice.gst_rate` is validated against the configured Xero tax rate before
   every push**, throwing rather than silently pushing a mismatched tax amount
   into the user's real accounting system — `gst_rate` is a real per-invoice
