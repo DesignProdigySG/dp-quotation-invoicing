@@ -51,6 +51,80 @@ export async function listGmailLabels() {
 // error is redacted to a generic message in production, so failures are
 // returned as { error } data instead.
 
+export type ProfileInput = {
+  full_name: string;
+  title: string;
+};
+
+export async function saveProfile(input: ProfileInput): Promise<{ error?: string }> {
+  try {
+    const { supabase, user } = await requireUser();
+    const { error } = await supabase.from("profiles").upsert({
+      owner_id: user.id,
+      full_name: input.full_name || null,
+      title: input.title || null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return { error: error.message };
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
+const SIGNATURE_PATH_SUFFIX = "signature";
+const ALLOWED_SIGNATURE_TYPES = ["image/png", "image/jpeg"];
+const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024;
+
+export async function uploadSignature(formData: FormData): Promise<{ error?: string }> {
+  try {
+    const { supabase, user } = await requireUser();
+    const file = formData.get("file");
+    if (!(file instanceof File)) return { error: "No file provided" };
+    if (!ALLOWED_SIGNATURE_TYPES.includes(file.type)) {
+      return { error: "Signature must be a PNG or JPG image" };
+    }
+    if (file.size > MAX_SIGNATURE_BYTES) {
+      return { error: "Signature image must be under 2MB" };
+    }
+
+    const path = `${user.id}/${SIGNATURE_PATH_SUFFIX}`;
+    const { error: uploadError } = await supabase.storage
+      .from("signatures")
+      .upload(path, file, { contentType: file.type, upsert: true });
+    if (uploadError) return { error: uploadError.message };
+
+    const { error } = await supabase.from("profiles").upsert({
+      owner_id: user.id,
+      signature_path: path,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return { error: error.message };
+
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
+export async function removeSignature(): Promise<{ error?: string }> {
+  try {
+    const { supabase, user } = await requireUser();
+    await supabase.storage.from("signatures").remove([`${user.id}/${SIGNATURE_PATH_SUFFIX}`]);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ signature_path: null, updated_at: new Date().toISOString() })
+      .eq("owner_id", user.id);
+    if (error) return { error: error.message };
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
 export async function saveWatchedLabel(
   labelId: string,
   labelName: string

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createClient } from "@/lib/supabase/server";
 import DocumentPdf from "@/lib/pdf/DocumentPdf";
+import { getSignatureDataUri } from "@/lib/profile/getSignatureDataUri";
 
 export async function GET(
   _req: NextRequest,
@@ -22,6 +23,13 @@ export async function GET(
   if (error || !invoice) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name, title, signature_path")
+    .eq("owner_id", invoice.owner_id)
+    .maybeSingle();
+  const signatureDataUri = await getSignatureDataUri(supabase, profile?.signature_path ?? null);
 
   const lineItems = ((invoice as any).invoice_line_items || []).sort(
     (a: any, b: any) => a.sort_order - b.sort_order
@@ -46,6 +54,9 @@ export async function GET(
       displayCurrency: invoice.display_currency as "original" | "sgd",
       lineItems,
       notes: invoice.notes,
+      preparedBy: profile?.full_name
+        ? { name: profile.full_name, title: profile.title, signatureDataUri }
+        : null,
     }) as Parameters<typeof renderToBuffer>[0]
   );
 
