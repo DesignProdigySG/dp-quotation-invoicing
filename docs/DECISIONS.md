@@ -127,3 +127,50 @@ fully self-contained, no external integration).
   document takes (Helvetica needs no file I/O or shaping at all) — that gap is
   inherent to embedding real CJK typefaces through a pure-JS shaper and is unlikely
   to close further without a different rendering approach entirely.
+
+## Decision 4: Nicer PDF template — real Design Prodigy branding
+
+Picked up the last Phase 2 item from HANDOFF.md's ready-to-build list. User supplied
+real reference material (their docx-based quotation generator script + Claude Skill
+doc, two example PDFs, the actual logo file, and their real Terms & Conditions /
+Payment Terms copy) rather than this being invented.
+
+- **Brand font**: Montserrat replaces Helvetica as the document default
+  (`lib/pdf/fonts.ts`'s `DEFAULT_FONT_FAMILY`), regular + bold weights vendored the
+  same way as the JP/KR fonts. The JP/KR font-switching logic (`fontFor()`) is
+  unchanged — Montserrat is just the new fallback instead of Helvetica.
+- **Logo**: real asset at `docs/DP_quotation_logo.png` (repo root), copied to
+  `quotation-app/lib/pdf/assets/logo.png` and embedded via `lib/pdf/logo.ts`
+  (same fs-read-to-base64-data-URI pattern as the signature image, but a static
+  checked-in file rather than per-user Storage). Rendered in a `fixed` View so it
+  repeats on every page — verified this doesn't overlap flowing content on page 2+
+  by testing a 40-line-item quote (page's `paddingTop` is bumped to reserve the
+  space `fixed` positioning doesn't automatically account for). If the file is ever
+  missing, the logo block is just omitted, not replaced with a text recreation —
+  there's a real asset checked into git, no need for a fallback font/design.
+- **Company "from" info** (`lib/pdf/brand.ts`'s `BRAND` constant): name, address,
+  Payment Terms, Terms & Conditions, and the quote validity window (20 days) are
+  all static content, not database fields — they're the same for every document
+  this app generates, sourced verbatim from the user, not fabricated.
+- **New two-column meta block** before the line items (Quotation/Invoice Number,
+  Company Name/Address, Bill To on the left; Created Date, Prepared By, Email,
+  Expiration Date/Due Date on the right) — replaces the old bare header, matching
+  the layout of the user's real reference template.
+- **New `quotations.valid_until` column** (nullable date), defaulting to
+  `quote_date + 20 days` at creation time only (computed server-side in
+  `createQuotation`, not re-derived on edit) — the 20-day default matches what the
+  Terms & Conditions text itself states, so the two can't drift apart
+  (`BRAND.quoteValidityDays` is the single source both read from).
+- **Footer signature block differs by document type**, deliberately:
+  - Quotations get the full "Quote accepted by:" (blank ruled lines for the
+    client to sign by hand — no client-signature data exists) / "Quote prepared
+    by:" (existing signature-image + name + title, now with a date added) two-
+    column block, matching the user's real reference template.
+  - Invoices get only the simpler existing "Prepared by" block (now with a date
+    added) — no client acceptance line. Confirmed with the user: invoices are
+    headed to Xero eventually (see the Phase 2 wishlist above), so this is a
+    stopgap, not worth building out the same ceremony as quotations.
+- Client `contact_name`/`contact_email`, invoice `reference`, and the status badge
+  all keep showing on the document (folded into the new Bill To block / an extra
+  meta row / left where it already was) — nothing was silently dropped from what
+  the old template showed.

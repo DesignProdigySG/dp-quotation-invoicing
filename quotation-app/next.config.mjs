@@ -2,8 +2,8 @@
 const nextConfig = {
   experimental: {
     outputFileTracingIncludes: {
-      "/api/quotes/[id]/pdf": ["./lib/pdf/fonts/**/*"],
-      "/api/invoices/[id]/pdf": ["./lib/pdf/fonts/**/*"],
+      "/api/quotes/[id]/pdf": ["./lib/pdf/fonts/**/*", "./lib/pdf/assets/**/*"],
+      "/api/invoices/[id]/pdf": ["./lib/pdf/fonts/**/*", "./lib/pdf/assets/**/*"],
     },
   },
 };

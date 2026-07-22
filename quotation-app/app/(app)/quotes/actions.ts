@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { addDaysToDateString } from "@/lib/format";
+import { BRAND } from "@/lib/pdf/brand";
 
 export type LineItemInput = {
   description: string;
@@ -20,6 +22,7 @@ export type QuotationInput = {
   billing_address_id?: string | null;
   billing_address?: string | null;
   notes?: string;
+  valid_until?: string | null;
   line_items: LineItemInput[];
 };
 
@@ -29,6 +32,9 @@ export async function createQuotation(input: QuotationInput) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not signed in");
+
+  const validUntil =
+    input.valid_until || addDaysToDateString(input.quote_date, BRAND.quoteValidityDays);
 
   const { data: quotation, error } = await supabase
     .from("quotations")
@@ -44,6 +50,7 @@ export async function createQuotation(input: QuotationInput) {
       billing_address_id: input.billing_address_id ?? null,
       billing_address: input.billing_address ?? null,
       notes: input.notes || null,
+      valid_until: validUntil,
     })
     .select()
     .single();
@@ -84,6 +91,7 @@ export async function updateQuotation(id: string, input: QuotationInput) {
       billing_address_id: input.billing_address_id ?? null,
       billing_address: input.billing_address ?? null,
       notes: input.notes || null,
+      valid_until: input.valid_until ?? null,
     })
     .eq("id", id);
   if (error) throw new Error(error.message);

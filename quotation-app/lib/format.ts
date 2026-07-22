@@ -10,6 +10,12 @@ export function formatMoney(amount: number, currency: string) {
   }
 }
 
+export function addDaysToDateString(dateString: string, days: number): string {
+  const date = new Date(`${dateString}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 export function computeTotals(
   lineItems: { quantity: number; unit_price: number }[],
   gstRate: number

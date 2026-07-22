@@ -41,6 +41,7 @@ export default function QuoteForm({
     billing_address_id?: string | null;
     billing_address?: string | null;
     notes: string;
+    valid_until?: string | null;
     line_items: LineItemInput[];
   };
 }) {
@@ -71,6 +72,7 @@ export default function QuoteForm({
       "original"
   );
   const [notes, setNotes] = useState(initial?.notes || "");
+  const [validUntil, setValidUntil] = useState(initial?.valid_until || "");
   const [billingAddressSelection, setBillingAddressSelection] = useState(
     initial?.billing_address_id ?? (initial?.billing_address ? "__custom__" : "__default__")
   );
@@ -158,6 +160,7 @@ export default function QuoteForm({
           : billingAddressSelection,
         billing_address: billingAddressText || null,
         notes,
+        valid_until: validUntil || null,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       };
       if (quoteId) {
@@ -212,6 +215,17 @@ export default function QuoteForm({
             type="date"
             value={quoteDate}
             onChange={(e) => setQuoteDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <label htmlFor="valid_until">
+            Expiration date{!quoteId && " (defaults to 20 days if left blank)"}
+          </label>
+          <input
+            id="valid_until"
+            type="date"
+            value={validUntil}
+            onChange={(e) => setValidUntil(e.target.value)}
           />
         </div>
         <div>
