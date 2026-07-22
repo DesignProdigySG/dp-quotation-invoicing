@@ -100,3 +100,30 @@ fully self-contained, no external integration).
   ships the font files with the function. Skipping this is the classic failure mode
   for this pattern: works locally, 500s (or silently reverts to tofu) in production
   because the font file isn't in the deployed bundle.
+- Follow-up: PDFs with JP/KR content rendered correctly but took 15-25s. Root cause:
+  `@react-pdf/renderer`'s shaping engine (`fontkit`, pure JS, no HarfBuzz) does
+  non-trivial per-call work that scales roughly linearly with the font's *total*
+  glyph count on every distinct string it lays out — confirmed by direct
+  benchmarking (`fontkit.create(...).layout(text)`), not just theorized. Full Noto
+  Sans JP/KR carry ~17-25k glyphs each (every kanji/hanja + every precomposed Hangul
+  syllable), so a document with ~7-8 distinct JP/KR fields (client name, address,
+  line items, etc.) paid that cost repeatedly.
+  Fix: re-subset both font files down to a curated "common use" character set
+  instead of the full repertoire — JIS X 0208's ~2965 level-1 kanji (the
+  Shift-JIS-standard common set) for Japanese, KS X 1001's ~2350 commonly-used
+  Hangul syllables (dropping Hanja, which modern Korean business text essentially
+  never uses) for Korean, both derived deterministically via Python's built-in
+  `shift_jis`/`euc_kr` codecs (no external kanji-frequency list needed) and cut with
+  `fonttools`' `pyftsubset`. Brought font size from ~11.6MB to ~900KB combined and
+  full mixed-script render time from ~15-25s to ~4s.
+  Trade-off, stated plainly: a character outside these common sets (a rare/archaic
+  kanji, an uncommon Hangul combination) renders as a blank glyph instead of the
+  correct character — confirmed this degrades gracefully rather than crashing.
+  Deemed an acceptable trade for realistic business documents (names/addresses/line
+  items). If a real client hits a missing character, the fix is widening the
+  subset's unicode/text-file input and re-running `pyftsubset`, not reverting to the
+  full font (which reintroduces the multi-second render time).
+  ~4s per JP/KR document is still slower than the ~150-200ms an English-only
+  document takes (Helvetica needs no file I/O or shaping at all) — that gap is
+  inherent to embedding real CJK typefaces through a pure-JS shaper and is unlikely
+  to close further without a different rendering approach entirely.
