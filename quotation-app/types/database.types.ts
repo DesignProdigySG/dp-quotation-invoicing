@@ -339,6 +339,7 @@ export type Database = {
           quote_number: string | null
           status: string
           updated_at: string
+          valid_until: string | null
         }
         Insert: {
           billing_address?: string | null
@@ -357,6 +358,7 @@ export type Database = {
           quote_number?: string | null
           status?: string
           updated_at?: string
+          valid_until?: string | null
         }
         Update: {
           billing_address?: string | null
@@ -375,6 +377,7 @@ export type Database = {
           quote_number?: string | null
           status?: string
           updated_at?: string
+          valid_until?: string | null
         }
         Relationships: [
           {

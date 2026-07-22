@@ -30,6 +30,9 @@ export async function GET(
     .eq("owner_id", quotation.owner_id)
     .maybeSingle();
   const signatureDataUri = await getSignatureDataUri(supabase, profile?.signature_path ?? null);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const lineItems = ((quotation as any).quotation_line_items || []).sort(
     (a: any, b: any) => a.sort_order - b.sort_order
@@ -55,6 +58,8 @@ export async function GET(
       preparedBy: profile?.full_name
         ? { name: profile.full_name, title: profile.title, signatureDataUri }
         : null,
+      preparedByEmail: user?.email ?? null,
+      validUntil: quotation.valid_until ?? null,
     }) as Parameters<typeof renderToBuffer>[0]
   );
 

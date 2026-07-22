@@ -30,6 +30,9 @@ export async function GET(
     .eq("owner_id", invoice.owner_id)
     .maybeSingle();
   const signatureDataUri = await getSignatureDataUri(supabase, profile?.signature_path ?? null);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const lineItems = ((invoice as any).invoice_line_items || []).sort(
     (a: any, b: any) => a.sort_order - b.sort_order
@@ -57,6 +60,7 @@ export async function GET(
       preparedBy: profile?.full_name
         ? { name: profile.full_name, title: profile.title, signatureDataUri }
         : null,
+      preparedByEmail: user?.email ?? null,
     }) as Parameters<typeof renderToBuffer>[0]
   );
 

@@ -72,6 +72,7 @@ export default async function QuoteDetailPage({
           billing_address_id: quotation.billing_address_id,
           billing_address: quotation.billing_address,
           notes: quotation.notes || "",
+          valid_until: quotation.valid_until,
           line_items: lineItems,
         }}
       />
