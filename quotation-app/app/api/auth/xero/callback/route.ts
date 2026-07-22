@@ -25,9 +25,18 @@ export async function GET(request: NextRequest) {
   try {
     const tokenSet = await xero.apiCallback(request.url);
     refreshToken = tokenSet.refresh_token;
-  } catch {
+  } catch (e) {
+    // Surface the real error rather than a hardcoded label — this call can
+    // fail for reasons other than a state mismatch (discovery/network
+    // errors, a rejected token exchange, etc.), and guessing the cause from
+    // a generic message wastes a debugging round trip.
     return NextResponse.redirect(
-      new URL("/settings?xero_error=invalid_state", request.url)
+      new URL(
+        `/settings?xero_error=${encodeURIComponent(
+          e instanceof Error ? e.message : "token_exchange_failed"
+        )}`,
+        request.url
+      )
     );
   }
 
