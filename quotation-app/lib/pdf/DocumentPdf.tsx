@@ -83,6 +83,7 @@ const styles = StyleSheet.create({
   footerCol: { width: "47%" },
   footerColTitle: { fontSize: 10, fontWeight: 700, marginBottom: 16 },
   footerRow: { marginBottom: 14 },
+  footerSignatureRow: { marginBottom: 14, minHeight: 58 },
   footerLabel: { fontSize: 8, textTransform: "uppercase", color: "#6b7280", marginBottom: 3 },
   footerValue: { fontSize: 10 },
   footerSignatureImage: { width: 110, height: 40, marginTop: 4, objectFit: "contain" },
@@ -339,7 +340,7 @@ export default function DocumentPdf({
           <View style={styles.footerSection} wrap={false}>
             <View style={styles.footerCol}>
               <Text style={styles.footerColTitle}>Quote accepted by:</Text>
-              <View style={styles.footerRow}>
+              <View style={styles.footerSignatureRow}>
                 <Text style={styles.footerLabel}>Signature</Text>
               </View>
               <View style={styles.footerRow}>
@@ -355,7 +356,7 @@ export default function DocumentPdf({
 
             <View style={styles.footerCol}>
               <Text style={styles.footerColTitle}>Quote prepared by:</Text>
-              <View style={styles.footerRow}>
+              <View style={styles.footerSignatureRow}>
                 <Text style={styles.footerLabel}>Signature</Text>
                 {preparedBy?.signatureDataUri && (
                   <Image style={styles.footerSignatureImage} src={preparedBy.signatureDataUri} />
