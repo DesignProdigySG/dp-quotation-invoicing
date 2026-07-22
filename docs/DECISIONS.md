@@ -174,3 +174,83 @@ Payment Terms copy) rather than this being invented.
   all keep showing on the document (folded into the new Bill To block / an extra
   meta row / left where it already was) — nothing was silently dropped from what
   the old template showed.
+
+## Decision 5: Xero invoice push — v1
+
+First of the two confirmed next-priority features from `docs/HANDOFF.md` (Xero,
+then Salesforce quote numbers). Scoped and built in one session after real Xero
+OAuth credentials were provisioned; a research + design-validation pass read the
+live schema/RLS and Xero's official OpenAPI spec directly rather than assuming.
+
+- **Single shared Xero connection, not per-user like Gmail.** One company Xero
+  org ("Design Prodigy Pte Ltd"); any teammate can push invoices they own to it.
+  `xero_connections` is a genuine singleton (`id integer primary key default 1
+  check (id = 1)`), always upserted at `id=1` — avoids any "which row is
+  canonical" ambiguity. Its RLS policy (`for all to authenticated using (true)
+  with check (true)`) is the **first non-owner_id-scoped policy in this
+  schema** — every other table here is `owner_id = auth.uid()`. This is
+  deliberate, not an oversight: there's no role/admin system in this app yet
+  (per HANDOFF.md's still-unbuilt "admin cross-user visibility" item), so
+  "any authenticated user can manage the shared company resource" matches the
+  trust level already implicit everywhere else. Confirmed this does NOT grant
+  any new cross-user visibility — invoices/clients stay exactly as
+  owner_id-scoped as before; a shared *destination* doesn't mean shared
+  *source data*.
+- **Xero's refresh tokens rotate on every use** (unlike Google's reusable
+  ones) — each refresh invalidates the previous refresh token (30-min grace
+  period). `lib/xero/client.ts`'s `getXeroClientForConnection()` persists the
+  newly-rotated token to `xero_connections` immediately after refreshing,
+  before making any other Xero API call — if a later step throws, the
+  connection must not be left pointing at a token Xero no longer honors.
+- **`lib/crypto.ts` was generalized** (env-var-name parameter, defaulting to
+  `GMAIL_TOKEN_ENCRYPTION_KEY` so all existing call sites are untouched) so
+  Xero tokens can use a separate `XERO_TOKEN_ENCRYPTION_KEY` — blast-radius
+  isolation between the two integrations' secrets.
+- **Tax type and account code are org-configurable, not hardcoded.** Xero's
+  `TaxType`/`AccountCode` are free-text strings specific to each org's chart of
+  accounts, not a fixed enum — `lib/xero/settings.ts` fetches the real
+  `TaxRates`/`Accounts` lists live so Settings can offer real choices, cached
+  onto `xero_connections` (`gst_tax_type`, `gst_tax_rate`, `no_gst_tax_type`,
+  `default_account_code`) once picked. This needed adding `accounting.settings`
+  to the Xero app's scopes (missing from the initial 3-scope setup) — flagged
+  and fixed before writing the settings-picker code, not discovered by a
+  runtime 403 later.
+- **`invoice.gst_rate` is validated against the configured Xero tax rate before
+  every push**, throwing rather than silently pushing a mismatched tax amount
+  into the user's real accounting system — `gst_rate` is a real per-invoice
+  field in this app (not a constant), so drift between what this app shows and
+  what Xero's configured rate actually is is a real risk, not a hypothetical.
+- **`LineAmountTypes: "Exclusive"`** — confirmed `lib/format.ts`'s
+  `computeTotals` treats `unit_price` as tax-exclusive; must match or Xero
+  double-accounts for tax.
+- **App status (`Draft`/`Sent`/`Paid`, CHECK-constrained) and Xero's own
+  invoice status are two independent state machines on the same row**, tracked
+  in separate new columns (`xero_invoice_id`, `xero_status`, `xero_pushed_at`,
+  `xero_push_error`, `xero_idempotency_key`) rather than merged — v1 has no
+  two-way sync (see cuts below), so the UI says so explicitly rather than
+  implying "mark as paid" here also marks it paid in Xero.
+- **`clients.xero_contact_id`** caches a matched/created Xero Contact so
+  repeat pushes for the same client skip re-searching Xero.
+- **Idempotency**: a UUID is generated and persisted to
+  `invoices.xero_idempotency_key` *before* calling Xero's create-invoice
+  endpoint (not after), and passed as Xero's `Idempotency-Key`. A crash between
+  "Xero received it" and "we recorded the result" can therefore retry safely
+  without double-creating the invoice — the key is only cleared by a
+  successful push, kept intact on failure for exactly this reason.
+- **V1 scope cuts, explicit**: `Status: "DRAFT"` hardcoded (human reviews/
+  authorises in Xero, no auto-authorise); push restricted to **SGD-currency
+  invoices only** (this app's `exchange_rate` field is a manual PDF-display
+  number, not something Xero necessarily agrees with — multi-currency Xero
+  push is a real fast-follow once SGD push is proven, not deferred out of
+  laziness); no two-way sync (pulling payment status back from Xero); no bulk/
+  batch push; no "View in Xero" deep link (couldn't verify the URL format
+  without a real connected org).
+- **What genuinely couldn't be verified without the user**: the OAuth
+  handshake itself (requires clicking through Xero's real login/consent
+  screen — no sandbox org available), the actual tax-rate/account-code names
+  in Design Prodigy's real Xero org, and the refresh-token path specifically
+  (testing it via any side script would itself consume and rotate the token,
+  desyncing whatever's stored — the only safe way to exercise it for real is
+  through the app's own code path). Everything else (`buildInvoicePayload.ts`
+  as a pure function, `tsc`/`next build`, the migration applied and confirmed
+  live) was verified directly this session.

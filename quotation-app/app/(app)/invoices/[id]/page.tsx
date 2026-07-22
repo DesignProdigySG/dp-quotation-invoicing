@@ -52,7 +52,14 @@ export default async function InvoiceDetailPage({
       </div>
 
       <div className="card">
-        <InvoiceActions invoiceId={invoice.id} status={invoice.status} />
+        <InvoiceActions
+          invoiceId={invoice.id}
+          status={invoice.status}
+          xeroInvoiceId={invoice.xero_invoice_id}
+          xeroStatus={invoice.xero_status}
+          xeroPushedAt={invoice.xero_pushed_at}
+          xeroPushError={invoice.xero_push_error}
+        />
       </div>
 
       <InvoiceForm

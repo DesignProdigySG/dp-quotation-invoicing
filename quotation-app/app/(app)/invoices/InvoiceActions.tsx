@@ -2,18 +2,26 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { setInvoiceStatus, deleteInvoice } from "./actions";
+import { setInvoiceStatus, deleteInvoice, pushInvoiceToXero } from "./actions";
 
 export default function InvoiceActions({
   invoiceId,
   status,
+  xeroInvoiceId,
+  xeroStatus,
+  xeroPushedAt,
+  xeroPushError,
 }: {
   invoiceId: string;
   status: string;
+  xeroInvoiceId: string | null;
+  xeroStatus: string | null;
+  xeroPushedAt: string | null;
+  xeroPushError: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(xeroPushError);
 
   async function markSent() {
     setBusy(true);
@@ -34,6 +42,23 @@ export default function InvoiceActions({
     try {
       await setInvoiceStatus(invoiceId, "Paid");
       router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pushToXero() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await pushInvoiceToXero(invoiceId);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        router.refresh();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -70,10 +95,22 @@ export default function InvoiceActions({
             Mark as paid
           </button>
         )}
+        {xeroInvoiceId ? null : (
+          <button className="btn" disabled={busy} onClick={pushToXero}>
+            Push to Xero
+          </button>
+        )}
         <button className="btn btn-danger" disabled={busy} onClick={remove}>
           Delete
         </button>
       </div>
+      {xeroInvoiceId && (
+        <p className="subtitle" style={{ marginTop: 8 }}>
+          Pushed to Xero ({xeroStatus || "DRAFT"}) on{" "}
+          {xeroPushedAt ? new Date(xeroPushedAt).toLocaleDateString() : "—"}. This is independent
+          of this app's own status above — mark it paid in Xero separately.
+        </p>
+      )}
     </div>
   );
 }

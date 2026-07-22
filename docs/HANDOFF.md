@@ -74,12 +74,31 @@ other session or agent.
   validity window). Full reasoning, including several rounds of visual
   feedback (column widths, date formatting, page-break behavior), in
   `docs/DECISIONS.md` Decision 4.
+- Xero invoice push (v1): a **single shared** Xero connection (`xero_connections`,
+  a genuine singleton — always `id=1`), connected/configured at
+  `app/(app)/settings/XeroSettings.tsx` + `actions.ts`
+  (`listXeroTaxRates`/`listXeroAccounts`/`saveXeroConfig`/`disconnectXero`).
+  OAuth flow at `app/api/auth/xero/{start,callback}/route.ts` (mirrors the
+  Gmail pattern). Push logic lives in `lib/xero/` (`client.ts` for the
+  token-refresh-and-persist path, `contacts.ts` for Contact matching/caching,
+  `buildInvoicePayload.ts` — a pure, unit-tested function — for the actual
+  payload), triggered via `pushInvoiceToXero()` in
+  `app/(app)/invoices/actions.ts` and a "Push to Xero" button in
+  `InvoiceActions.tsx`. **v1 is SGD-only, DRAFT-only, one-way** (no pulling
+  payment status back from Xero) — read `docs/DECISIONS.md` Decision 5 in
+  full before touching this, especially the refresh-token-rotation handling
+  and the gst_rate-vs-Xero-tax-rate validation; both are easy to accidentally
+  break in a way that either silently desyncs the connection after ~60 days
+  or pushes a wrong tax amount into the user's real accounting system.
 
 ## Env vars (Vercel, Production + Preview)
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
   `SUPABASE_SERVICE_ROLE_KEY`
 - `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`
 - `GMAIL_TOKEN_ENCRYPTION_KEY` (AES-256-GCM key for refresh tokens, `lib/crypto.ts`)
+- `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_REDIRECT_URI`,
+  `XERO_TOKEN_ENCRYPTION_KEY` (separate encryption key from Gmail's — same
+  `lib/crypto.ts`, parameterized by env-var name)
 - `ANTHROPIC_API_KEY`
 - `EMAIL_QUOTE_WEBHOOK_SECRET`, `CRON_SECRET` — both vestigial (the n8n webhook and
   the cron job were superseded by the in-app pipeline above); harmless to leave, fine
@@ -87,21 +106,20 @@ other session or agent.
 
 ## What's next (confirmed priorities, in order)
 
-**1. Xero invoice push.** Confirmed directly with the user: invoices are
-meant to be generated in Xero going forward, not just downloaded as an in-app
-PDF. This would map quotation/invoice line items, client/contact info, and
-tax treatment onto Xero's API and let the in-app invoice PDF become a fallback
-rather than the primary deliverable. Not yet scoped — needs a Xero developer
-app + OAuth credentials from the user before any code can be written. Expect
-real complexity in field mapping (tax codes, contact matching, currency)
-that's easy to underestimate.
+**1. Salesforce-generated quote numbers with PDF-download gating.** Confirmed
+next priority (Xero invoice push, previously #1 here, shipped this session —
+see Feature map above and `docs/DECISIONS.md` Decision 5). Not yet scoped. The
+original reference material for this project's docx-based quotation generator
+used a `{{SalesforceQuoteNo}}` placeholder, suggesting the intent is for
+Salesforce to be the source of truth for quote numbers rather than the
+freeform text field this app currently has.
 
-**2. Salesforce-generated quote numbers with PDF-download gating.** Next
-priority after Xero. Also not yet scoped. The original reference material for
-this project's docx-based quotation generator used a `{{SalesforceQuoteNo}}`
-placeholder, suggesting the intent is for Salesforce to be the source of
-truth for quote numbers rather than the freeform text field this app
-currently has.
+**Fast-follows on the Xero v1 cuts, not yet prioritized:**
+- Multi-currency Xero push (v1 is SGD-only — see Decision 5 for why).
+- Two-way sync: pulling payment status back from Xero into this app's own
+  `status` field (v1 is one-way/push-only).
+- A "View in Xero" deep link on the invoice detail page (skipped in v1, no
+  way to verify the URL format without a real connected org at the time).
 
 **Still on the shelf, not reprioritized:**
 - **Editable docx export.** Self-contained, no external integration. Use the
@@ -115,7 +133,7 @@ currently has.
 - Multi-quote-per-email splitting.
 - Admin cross-user visibility.
 
-All four of the above are real Phase 2 work but meaningfully bigger than a
+All of the above are real Phase 2 work but meaningfully bigger than a
 single-session task — external integrations, schema-shape changes, or an
 RLS/security-model change — and should be scoped individually when picked up.
 
