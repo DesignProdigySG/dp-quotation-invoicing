@@ -4,7 +4,6 @@ import type { XeroConnectionRow } from "./client";
 export type InvoiceForXero = {
   invoice_date: string;
   due_date: string | null;
-  invoice_number: string | null;
   reference: string | null;
   currency: string;
   gst_applicable: boolean;
@@ -70,7 +69,13 @@ export function buildInvoicePayload(
     })),
     date: invoice.invoice_date,
     dueDate: invoice.due_date ?? undefined,
-    invoiceNumber: invoice.invoice_number ?? undefined,
+    // Deliberately omitted: `invoiceNumber`. This app assigns its own
+    // placeholder number (INV-YYYY-NNNN, via the `set_invoice_number` DB
+    // trigger) at creation time, but that's ours, not Xero's — sending it as
+    // `invoiceNumber` just makes Xero echo it back verbatim instead of
+    // assigning its own. Leaving the field unset lets Xero auto-generate its
+    // own number (per the org's Invoice Settings), which pushInvoiceToXero
+    // and refreshInvoiceFromXero then pull back into this app.
     reference: invoice.reference ?? undefined,
     currencyCode: CurrencyCode.SGD,
     lineAmountTypes: LineAmountTypes.Exclusive,

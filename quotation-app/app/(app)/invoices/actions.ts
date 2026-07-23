@@ -132,7 +132,6 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<{ error?: st
       {
         invoice_date: invoice.invoice_date,
         due_date: invoice.due_date,
-        invoice_number: invoice.invoice_number,
         reference: invoice.reference,
         currency: invoice.currency,
         gst_applicable: invoice.gst_applicable,
@@ -197,7 +196,12 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<{ error?: st
         xero_status: created.status ? String(created.status) : null,
         xero_pushed_at: new Date().toISOString(),
         xero_push_error: null,
-        invoice_number: invoice.invoice_number ?? created.invoiceNumber ?? null,
+        // Prefer Xero's own generated number now that we don't send ours —
+        // it usually assigns one immediately, but if the org has automatic
+        // numbering off it can come back blank, in which case keep this
+        // app's placeholder until a later "Refresh from Xero" picks up a
+        // real one.
+        invoice_number: created.invoiceNumber || invoice.invoice_number,
       })
       .eq("id", invoiceId);
     if (updateError) return { error: updateError.message };

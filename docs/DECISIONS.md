@@ -355,6 +355,23 @@ simplest, and needs no new Xero portal config.
 - **Deferred**: automatic/scheduled refresh (webhooks or polling) — the user
   confirmed manual is fine for now; revisit if staleness becomes a real
   problem.
+- **Bug found immediately after shipping this**: `buildInvoicePayload.ts` was
+  sending this app's own placeholder number (`INV-YYYY-NNNN`, assigned by the
+  `set_invoice_number` DB trigger at invoice-creation time, well before any
+  Xero push) as Xero's `invoiceNumber` field. Xero doesn't treat an incoming
+  `invoiceNumber` as a suggestion — it just uses it verbatim — so every pushed
+  invoice showed this app's number in Xero instead of one Xero generated
+  itself, defeating the entire point of this decision. Fixed by omitting
+  `invoiceNumber` from the payload entirely (so Xero auto-assigns per the
+  org's own Invoice Settings) and changing `pushInvoiceToXero`'s post-push
+  update to prefer `created.invoiceNumber` over this app's local number
+  (falling back to the local placeholder only if Xero's org has automatic
+  numbering off and returns nothing yet — the same fallback
+  `refreshInvoiceFromXero` already used). **Note**: any invoice pushed before
+  this fix already has this app's number permanently recorded in Xero as its
+  real invoice number — that has to be corrected manually in Xero's own
+  invoice editor (while still a Draft) if it matters; there's no API-safe way
+  to retroactively unset an invoice number Xero has already assigned.
 - Next up (not yet built): a second Gmail label on the same connection
   watching for client Purchase Order emails, matched against existing
   invoices via a review queue — mirrors the existing quote-email pipeline
