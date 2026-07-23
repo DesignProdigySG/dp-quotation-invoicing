@@ -209,3 +209,62 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<{ error?: st
     return await recordFailure(describeXeroError(e));
   }
 }
+
+// Pulls the latest status (and invoice number, once Xero has assigned one)
+// for an invoice that's already been pushed. Manual button, not automatic
+// polling/webhooks — confirmed with the user that's the simplest option and
+// needs no extra Xero portal config. Same never-throw / persist-failure
+// convention as pushInvoiceToXero above.
+export async function refreshInvoiceFromXero(invoiceId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  const { data: invoice, error: fetchError } = await supabase
+    .from("invoices")
+    .select("xero_invoice_id, invoice_number")
+    .eq("id", invoiceId)
+    .single();
+
+  if (fetchError || !invoice) {
+    return { error: "Invoice not found" };
+  }
+  if (!invoice.xero_invoice_id) {
+    return { error: "This invoice hasn't been pushed to Xero yet" };
+  }
+
+  async function recordFailure(message: string) {
+    await supabase
+      .from("invoices")
+      .update({ xero_push_error: message })
+      .eq("id", invoiceId);
+    return { error: message };
+  }
+
+  try {
+    const { xero, tenantId } = await getXeroClientForConnection();
+
+    const { body } = await xero.accountingApi.getInvoice(tenantId, invoice.xero_invoice_id);
+    const fetched = body.invoices?.[0];
+    if (!fetched) {
+      return await recordFailure("Xero didn't return this invoice");
+    }
+
+    const { error: updateError } = await supabase
+      .from("invoices")
+      .update({
+        xero_status: fetched.status ? String(fetched.status) : null,
+        // Xero often doesn't assign a real invoice number until the draft is
+        // authorised in Xero itself — don't blank out a number this app
+        // already has just because Xero hasn't assigned one yet.
+        invoice_number: fetched.invoiceNumber || invoice.invoice_number,
+        xero_push_error: null,
+      })
+      .eq("id", invoiceId);
+    if (updateError) return { error: updateError.message };
+
+    revalidatePath(`/invoices/${invoiceId}`);
+    revalidatePath("/invoices");
+    return {};
+  } catch (e) {
+    return await recordFailure(describeXeroError(e));
+  }
+}
