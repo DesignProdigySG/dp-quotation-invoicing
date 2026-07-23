@@ -379,3 +379,50 @@ simplest, and needs no new Xero portal config.
   3-tier matcher) with a new `unmatched_email_pos` table and `lib/email-po/`
   module. Deliberately phased as a separate, bigger follow-up rather than
   bundled into this change.
+
+## Decision 7: Xero status sync — single-invoice + bulk check
+
+After testing Decision 6, the user pointed out "Refresh from Xero" only
+updated the separate `xero_status` display field — it never touched the
+app's own `status` column (Draft/Sent/Paid, CHECK-constrained, drives the
+"Mark as sent"/"Mark as paid" buttons and every StatusBadge). They wanted the
+refresh to actually sync the app's status, plus a bulk way to check all
+not-yet-Paid invoices at once from the Invoices list.
+
+- **`lib/xero/nextAppStatus.ts` (new)**: rank-based, monotonic-only mapping
+  (Draft=0 < Sent=1 < Paid=2). Xero `PAID` → target `Paid`;
+  `AUTHORISED`/`SUBMITTED` → target `Sent`; `DRAFT`/`VOIDED`/`DELETED` → no
+  change. The target is only applied if its rank is *higher* than the
+  invoice's current status — a manually-marked "Paid" invoice must never be
+  knocked back to "Sent" automatically just because Xero hasn't caught up
+  (or was voided after the fact).
+- **`lib/xero/applyXeroInvoiceToRow.ts` (new)**: `computeInvoiceUpdateFromXero`
+  shared by both the single-invoice refresh and the new bulk check — same
+  "given current row + a fetched Xero invoice, what changes" logic in one
+  place instead of duplicated across the two call sites.
+- **No schema change.** `invoices.status` stays exactly `'Draft' | 'Sent' |
+  'Paid'` — no 4th "Awaiting Payment" value. The user's "nice to have, not a
+  big deal if not" ask for finer-grained visibility is instead satisfied by
+  showing `xeroStatusLabel(xero_status)` as a secondary hint next to the
+  StatusBadge on the Invoices list, a pure display addition.
+- **New `checkInvoicesAgainstXero()`** (`app/(app)/invoices/actions.ts`):
+  selects every invoice with `status in ('Draft','Sent')` and a
+  `xero_invoice_id`, then fetches them from Xero in as few calls as possible
+  via `getInvoices(tenantId, undefined, undefined, undefined, iDs)` — this
+  API supports fetching many specific invoices by ID in a single call, unlike
+  `getInvoice` which only takes one, so a bulk check doesn't mean N round
+  trips. Chunked into batches of 100 (Xero's own page-size ceiling) as cheap
+  insurance, even though this app has few invoices in practice. Each row's
+  update is independent, so a Xero error partway through still leaves the
+  successfully-checked rows correctly updated — the never-throw convention
+  returns partial `updatedToPaid`/`updatedToSent` counts alongside the error
+  rather than treating it as an all-or-nothing transaction.
+- **UI**: new `CheckXeroStatusButton.tsx` on `/invoices` (not `/board`,
+  which mixes quotes and invoices and has no natural "Draft/Sent + pushed to
+  Xero" filter today — kept out of scope to avoid the added complexity for
+  no real benefit).
+- Design validated with a Plan agent against the real code before
+  implementing (confirmed the `getInvoices` `iDs` signature, the exact CHECK
+  constraint via `pg_get_constraintdef`, and that no additional abstraction
+  beyond the two small pure-function files above was warranted for just two
+  call sites).
