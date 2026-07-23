@@ -3,12 +3,12 @@ import Anthropic from "@anthropic-ai/sdk";
 export type ExtractedPo = {
   client_name?: string;
   po_number?: string;
-  referenced_invoice_number?: string;
+  description?: string;
   amount?: number;
   notes?: string;
 };
 
-const SYSTEM_PROMPT = `You extract structured purchase-order data from emails. Reply with ONLY a single JSON object matching this exact schema, no markdown fences, no commentary: { "client_name"?: string, "po_number"?: string, "referenced_invoice_number"?: string, "amount"?: number, "notes"?: string }. po_number is the purchase order's own number/reference, if stated. referenced_invoice_number is any invoice number or reference the email mentions this PO relates to, if stated. amount is the stated total amount as a plain number (no currency symbol), if stated. Omit any field that isn't clearly stated in the email rather than guessing.`;
+const SYSTEM_PROMPT = `You extract structured purchase-order data from emails. Reply with ONLY a single JSON object matching this exact schema, no markdown fences, no commentary: { "client_name"?: string, "po_number"?: string, "description"?: string, "amount"?: number, "notes"?: string }. po_number is the purchase order's own number/reference, if stated — this is the client's own internal numbering, not expected to match anything on our side. description is a short summary of the goods/services this PO covers (e.g. "website redesign", "3x office chairs") — this is the main signal used to figure out which of our quotations or invoices this PO relates to, so extract it carefully from whatever the email says the PO is for. amount is the stated total amount as a plain number (no currency symbol), if stated. Omit any field that isn't clearly stated in the email rather than guessing.`;
 
 export async function extractPoFromEmail(params: {
   subject: string;

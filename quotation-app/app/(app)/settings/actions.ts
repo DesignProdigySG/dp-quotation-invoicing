@@ -21,8 +21,9 @@ import type { Json } from "@/types/database.types";
 import { getXeroClientForConnection } from "@/lib/xero/client";
 import { listTaxRates, listAccounts } from "@/lib/xero/settings";
 import { extractPoFromEmail } from "@/lib/email-po/extractPoFromEmail";
-import { matchInvoiceForPo } from "@/lib/email-po/matchInvoiceForPo";
+import { fuzzyMatchDocumentForPo, type DocumentCandidate } from "@/lib/email-po/fuzzyMatchDocumentForPo";
 import { insertUnmatchedPo } from "@/lib/email-po/insertUnmatchedPo";
+import { computeTotals } from "@/lib/format";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -520,16 +521,65 @@ export async function processSelectedPoMessages(
         // Tier 3: extraction.
         const extracted = await extractPoFromEmail({ subject, from, body: bodyText });
 
-        // Tier 4: once a client is identified, try to match a stated
-        // PO/invoice number against that client's own invoices.
+        // Tier 4: once a client is identified, a PO is triggered by a
+        // quotation (the invoice is downstream of that) and rarely cites our
+        // own numbering — match by amount + description across that
+        // client's quotations AND invoices together.
         let suggestedInvoiceId: string | null = null;
+        let suggestedInvoiceSource: string | null = null;
+        let suggestedQuotationId: string | null = null;
         if (match) {
-          const { data: clientInvoices } = await supabase
-            .from("invoices")
-            .select("id, invoice_number, reference")
-            .eq("client_id", match.client.id);
-          const invoiceMatch = matchInvoiceForPo(extracted, clientInvoices || []);
-          suggestedInvoiceId = invoiceMatch?.id ?? null;
+          const [{ data: clientQuotations }, { data: clientInvoices }] = await Promise.all([
+            supabase
+              .from("quotations")
+              .select("id, quote_number, currency, gst_rate, quote_date, quotation_line_items(description, quantity, unit_price)")
+              .eq("client_id", match.client.id),
+            supabase
+              .from("invoices")
+              .select("id, invoice_number, currency, gst_rate, invoice_date, quotation_id, invoice_line_items(description, quantity, unit_price)")
+              .eq("client_id", match.client.id),
+          ]);
+
+          const candidates: DocumentCandidate[] = [
+            ...(clientQuotations || []).map((q) => ({
+              type: "quotation" as const,
+              id: q.id,
+              number: q.quote_number,
+              currency: q.currency,
+              total: computeTotals(q.quotation_line_items || [], q.gst_rate).total,
+              date: q.quote_date,
+              descriptions: (q.quotation_line_items || []).map((li) => li.description),
+            })),
+            ...(clientInvoices || []).map((inv) => ({
+              type: "invoice" as const,
+              id: inv.id,
+              number: inv.invoice_number,
+              currency: inv.currency,
+              total: computeTotals(inv.invoice_line_items || [], inv.gst_rate).total,
+              date: inv.invoice_date,
+              descriptions: (inv.invoice_line_items || []).map((li) => li.description),
+            })),
+          ];
+
+          const docMatch = await fuzzyMatchDocumentForPo({
+            description: extracted.description,
+            amount: extracted.amount,
+            candidates,
+          });
+
+          if (docMatch?.type === "invoice") {
+            suggestedInvoiceId = docMatch.id;
+            suggestedInvoiceSource = "ai_amount_match";
+          } else if (docMatch?.type === "quotation") {
+            suggestedQuotationId = docMatch.id;
+            const linkedInvoice = (clientInvoices || []).find(
+              (inv) => inv.quotation_id === docMatch.id
+            );
+            if (linkedInvoice) {
+              suggestedInvoiceId = linkedInvoice.id;
+              suggestedInvoiceSource = "ai_match_via_quotation";
+            }
+          }
         }
 
         await insertUnmatchedPo({
@@ -541,6 +591,8 @@ export async function processSelectedPoMessages(
           suggested_client_id: match?.client.id ?? null,
           suggested_client_source: match?.source ?? null,
           suggested_invoice_id: suggestedInvoiceId,
+          suggested_invoice_source: suggestedInvoiceSource,
+          suggested_quotation_id: suggestedQuotationId,
         });
 
         result.processed++;

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { resolveUnmatchedEmailPo, dismissUnmatchedEmailPo } from "./actions";
+import { formatMoney } from "@/lib/format";
 
 type ClientOption = {
   id: string;
@@ -17,6 +18,13 @@ type InvoiceOption = {
   reference: string | null;
   notes: string | null;
   currency: string;
+  total: number;
+};
+
+type QuotationOption = {
+  id: string;
+  quote_number: string | null;
+  client_id: string;
 };
 
 type UnmatchedItem = {
@@ -29,12 +37,14 @@ type UnmatchedItem = {
   suggested_client_id: string | null;
   suggested_client_source: string | null;
   suggested_invoice_id: string | null;
+  suggested_invoice_source: string | null;
+  suggested_quotation_id: string | null;
 };
 
 type ParsedData = {
   client_name?: string;
   po_number?: string;
-  referenced_invoice_number?: string;
+  description?: string;
   amount?: number;
   notes?: string;
 };
@@ -43,10 +53,12 @@ export default function PoReviewQueue({
   items,
   clients,
   invoices,
+  quotations,
 }: {
   items: UnmatchedItem[];
   clients: ClientOption[];
   invoices: InvoiceOption[];
+  quotations: QuotationOption[];
 }) {
   if (items.length === 0) {
     return <div className="card empty">Nothing waiting on review right now.</div>;
@@ -55,7 +67,13 @@ export default function PoReviewQueue({
   return (
     <div className="review-queue">
       {items.map((item) => (
-        <PoReviewItemCard key={item.id} item={item} clients={clients} invoices={invoices} />
+        <PoReviewItemCard
+          key={item.id}
+          item={item}
+          clients={clients}
+          invoices={invoices}
+          quotations={quotations}
+        />
       ))}
     </div>
   );
@@ -64,19 +82,28 @@ export default function PoReviewQueue({
 function defaultNote(parsed: ParsedData): string {
   const parts: string[] = [];
   if (parsed.po_number) parts.push(`PO ${parsed.po_number}`);
+  if (parsed.description) parts.push(parsed.description);
   if (parsed.amount) parts.push(`amount stated: ${parsed.amount}`);
   if (parsed.notes) parts.push(parsed.notes);
   return parts.join(" — ");
+}
+
+function matchSourceLabel(source: string | null): string | null {
+  if (source === "ai_amount_match") return "Matched by amount/description";
+  if (source === "ai_match_via_quotation") return "Matched via linked quotation";
+  return null;
 }
 
 function PoReviewItemCard({
   item,
   clients,
   invoices,
+  quotations,
 }: {
   item: UnmatchedItem;
   clients: ClientOption[];
   invoices: InvoiceOption[];
+  quotations: QuotationOption[];
 }) {
   const router = useRouter();
   const parsed = (item.parsed_data || {}) as ParsedData;
@@ -100,6 +127,11 @@ function PoReviewItemCard({
   const [saving, setSaving] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const unconvertedQuotation =
+    !item.suggested_invoice_id && item.suggested_quotation_id
+      ? quotations.find((q) => q.id === item.suggested_quotation_id)
+      : null;
 
   function handleClientChange(id: string) {
     setClientId(id);
@@ -158,6 +190,15 @@ function PoReviewItemCard({
 
       {error && <div className="error">{error}</div>}
 
+      {unconvertedQuotation && (
+        <div className="notice">
+          Matches Quote {unconvertedQuotation.quote_number || unconvertedQuotation.id} — not yet
+          invoiced.{" "}
+          <a href={`/quotes/${unconvertedQuotation.id}`}>Convert it to an invoice</a>, then come
+          back to attach this PO.
+        </div>
+      )}
+
       {clients.length === 0 ? (
         <p>You need at least one client to match this PO against an invoice.</p>
       ) : (
@@ -186,7 +227,8 @@ function PoReviewItemCard({
                 <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)}>
                   {clientInvoices.map((inv) => (
                     <option key={inv.id} value={inv.id}>
-                      {inv.invoice_number || inv.id} ({inv.status})
+                      {inv.invoice_number || inv.id} ({inv.status}) —{" "}
+                      {formatMoney(inv.total, inv.currency)}
                     </option>
                   ))}
                 </select>
@@ -195,7 +237,7 @@ function PoReviewItemCard({
               )}
               {item.suggested_invoice_id === invoiceId && item.suggested_invoice_id && (
                 <p className="subtitle" style={{ margin: "4px 0 0" }}>
-                  Matched by PO/invoice number
+                  {matchSourceLabel(item.suggested_invoice_source)}
                 </p>
               )}
             </div>
