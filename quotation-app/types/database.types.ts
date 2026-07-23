@@ -438,6 +438,8 @@ export type Database = {
           suggested_client_id: string | null
           suggested_client_source: string | null
           suggested_invoice_id: string | null
+          suggested_invoice_source: string | null
+          suggested_quotation_id: string | null
         }
         Insert: {
           created_at?: string
@@ -453,6 +455,8 @@ export type Database = {
           suggested_client_id?: string | null
           suggested_client_source?: string | null
           suggested_invoice_id?: string | null
+          suggested_invoice_source?: string | null
+          suggested_quotation_id?: string | null
         }
         Update: {
           created_at?: string
@@ -468,6 +472,8 @@ export type Database = {
           suggested_client_id?: string | null
           suggested_client_source?: string | null
           suggested_invoice_id?: string | null
+          suggested_invoice_source?: string | null
+          suggested_quotation_id?: string | null
         }
         Relationships: [
           {
@@ -489,6 +495,13 @@ export type Database = {
             columns: ["suggested_invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unmatched_email_pos_suggested_quotation_id_fkey"
+            columns: ["suggested_quotation_id"]
+            isOneToOne: false
+            referencedRelation: "quotations"
             referencedColumns: ["id"]
           },
         ]

@@ -488,3 +488,48 @@ route.
   directly and isn't set up for injection; revisit generalizing if a third
   such flow ever shows up. Rendered as a second block inside the existing
   Gmail card (same connection, no new "Connect" step).
+
+### Post-ship correction: match by amount + description, across quotes AND invoices
+
+Real-world feedback immediately after shipping the above: the deterministic
+number-match tier was based on a wrong assumption. Two corrections, from the
+user directly:
+
+1. Client POs usually do have their own PO number, but it's the client's own
+   internal numbering — unrelated to our quotation/invoice numbers. String-
+   comparing the two was never going to match anything in practice.
+2. More fundamentally, a PO is triggered by a **quotation** we sent, not
+   directly by an invoice — "the invoice is downstream of that." A PO can
+   arrive before its quotation has even been converted to an invoice.
+   Confirmed via `AskUserQuestion`: matching should search the client's
+   **quotations and invoices together** ("Both quotations + invoices"),
+   not invoices alone.
+
+Fixed by replacing the whole matching tier:
+- **`ExtractedPo`** dropped `referenced_invoice_number` (meaningless) and
+  gained `description` — a short summary of the goods/services the PO
+  covers, extracted specifically to be matched against line-item
+  descriptions.
+- **`lib/email-po/matchInvoiceForPo.ts` deleted**; replaced by
+  **`lib/email-po/fuzzyMatchDocumentForPo.ts`**, mirroring
+  `fuzzyMatchClient.ts`'s exact pattern (Haiku, `temperature: 0`, validate
+  the returned id is actually in the candidate list, null preferred over a
+  low-confidence guess) — but matching against a combined candidate list of
+  the identified client's **quotations and invoices**, each with a computed
+  total (via the existing `computeTotals`) and its line-item descriptions,
+  picked primarily by amount closeness and description similarity.
+- **`processSelectedPoMessages`** now: if the match lands on an invoice
+  directly, suggest it (`suggested_invoice_source = "ai_amount_match"`). If
+  it lands on a quotation, always record `suggested_quotation_id` (for
+  reviewer visibility) and look up whether that quotation has already been
+  converted to an invoice (`invoices.quotation_id`) — if so, suggest that
+  invoice (`"ai_match_via_quotation"`); if not, leave `suggested_invoice_id`
+  null rather than force-converting anything automatically.
+- **Review UI**: when a PO matches an unconverted quotation, the card shows
+  "Matches Quote {number} — not yet invoiced" with a link to convert it,
+  instead of a misleading "no match" state. The invoice picker now also
+  shows each candidate's computed total (`INV-... (Sent) — SGD 1,200.00`) so
+  a reviewer can visually sanity-check an amount-based (inherently fuzzier
+  than exact-number) match.
+- New `unmatched_email_pos` columns: `suggested_invoice_source`,
+  `suggested_quotation_id` (both nullable, additive migration).

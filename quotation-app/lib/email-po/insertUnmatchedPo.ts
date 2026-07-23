@@ -10,6 +10,8 @@ export async function insertUnmatchedPo(input: {
   suggested_client_id?: string | null;
   suggested_client_source?: string | null;
   suggested_invoice_id?: string | null;
+  suggested_invoice_source?: string | null;
+  suggested_quotation_id?: string | null;
 }) {
   const supabase = createServiceClient();
   const { error } = await supabase.from("unmatched_email_pos").insert({
@@ -21,6 +23,8 @@ export async function insertUnmatchedPo(input: {
     suggested_client_id: input.suggested_client_id ?? null,
     suggested_client_source: input.suggested_client_source ?? null,
     suggested_invoice_id: input.suggested_invoice_id ?? null,
+    suggested_invoice_source: input.suggested_invoice_source ?? null,
+    suggested_quotation_id: input.suggested_quotation_id ?? null,
   });
 
   if (error) throw new Error(error.message);
