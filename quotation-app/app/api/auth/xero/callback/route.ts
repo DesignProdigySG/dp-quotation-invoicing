@@ -28,7 +28,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const xero = getXeroClient(expectedState);
+  let xero;
+  try {
+    xero = getXeroClient(expectedState);
+  } catch (e) {
+    return NextResponse.redirect(
+      new URL(
+        `/settings?xero_error=${encodeURIComponent(
+          e instanceof Error ? e.message : "xero_client_config_error"
+        )}`,
+        request.url
+      )
+    );
+  }
 
   let refreshToken: string | undefined;
   try {
@@ -78,24 +90,41 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Deliberately omits gst_tax_type/no_gst_tax_type/default_account_code so a
-  // reconnect doesn't clear an already-saved mapping.
-  const { error } = await supabase.from("xero_connections").upsert(
-    {
-      id: 1,
-      tenant_id: tenantId,
-      tenant_name: tenantName ?? null,
-      refresh_token_encrypted: encrypt(refreshToken, "XERO_TOKEN_ENCRYPTION_KEY"),
-      connected_by: user.id,
-      connected_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" }
-  );
+  // By this point Xero's one-time authorization code has already been
+  // successfully exchanged (the apiCallback() call above succeeded) — it
+  // cannot be retried. Everything from here on MUST redirect with an error
+  // rather than throw, or a crash (e.g. a missing env var inside encrypt())
+  // looks like a raw 500 with no explanation, while quietly having already
+  // burned the one-shot code.
+  try {
+    // Deliberately omits gst_tax_type/no_gst_tax_type/default_account_code so
+    // a reconnect doesn't clear an already-saved mapping.
+    const { error } = await supabase.from("xero_connections").upsert(
+      {
+        id: 1,
+        tenant_id: tenantId,
+        tenant_name: tenantName ?? null,
+        refresh_token_encrypted: encrypt(refreshToken, "XERO_TOKEN_ENCRYPTION_KEY"),
+        connected_by: user.id,
+        connected_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    );
 
-  if (error) {
+    if (error) {
+      return NextResponse.redirect(
+        new URL(`/settings?xero_error=${encodeURIComponent(error.message)}`, request.url)
+      );
+    }
+  } catch (e) {
     return NextResponse.redirect(
-      new URL(`/settings?xero_error=${encodeURIComponent(error.message)}`, request.url)
+      new URL(
+        `/settings?xero_error=${encodeURIComponent(
+          e instanceof Error ? e.message : "save_failed"
+        )}`,
+        request.url
+      )
     );
   }
 
