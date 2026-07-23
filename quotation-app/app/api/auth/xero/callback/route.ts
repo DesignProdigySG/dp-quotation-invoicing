@@ -3,6 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { getXeroClient } from "@/lib/xero/oauthClient";
 import { encrypt } from "@/lib/crypto";
 
+// This route does an OIDC discovery round-trip (a fresh XeroClient here has
+// no cached issuer metadata from the /start request), the token exchange, a
+// connected-tenants lookup, and a Supabase write — all sequential. That's
+// comfortably past Vercel's 10s default function timeout on some invocations,
+// and if the function is killed after Xero has already consumed the one-time
+// authorization code but before the connection is saved, the result looks
+// exactly like a hung request followed by "invalid_grant" on retry.
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
   const expectedState = request.cookies.get("xero_oauth_state")?.value;
   if (!expectedState) {
