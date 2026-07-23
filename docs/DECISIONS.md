@@ -316,3 +316,49 @@ live schema/RLS and Xero's official OpenAPI spec directly rather than assuming.
   definitive response, including a rejection, spends the key and clears it so
   the next attempt gets a fresh one. This self-heals invoices that were stuck
   from the earlier bug without needing a manual DB fix.
+
+## Decision 6: Refresh from Xero (status + invoice number) — Xero v1's first fast-follow
+
+After the first real invoice pushed successfully, the user asked for two
+related things: use Xero's own invoice number instead of this app's, and track
+the invoice's status in Xero (draft/awaiting payment/paid). Both are the same
+underlying gap — v1 explicitly deferred pulling anything back from Xero after
+the initial push (Decision 5's scope cuts). Confirmed with the user: a manual
+"Refresh from Xero" button is enough, not automatic polling or webhooks —
+simplest, and needs no new Xero portal config.
+
+- **`app/(app)/invoices/actions.ts`'s new `refreshInvoiceFromXero(invoiceId)`**
+  mirrors `pushInvoiceToXero`'s conventions exactly: never throws, returns
+  `{error?}`, persists failures onto `invoices.xero_push_error` so they survive
+  a refresh. It calls `xero.accountingApi.getInvoice(tenantId, xero_invoice_id)`
+  and updates `xero_status` unconditionally, but updates `invoice_number` only
+  when Xero returns a non-empty one — Xero often doesn't assign a real invoice
+  number until the draft is authorised in Xero itself, so a not-yet-authorised
+  refresh must not blank out a number this app already has.
+- **`Invoice.StatusEnum` is a genuine string enum at runtime** (confirmed
+  directly against the compiled SDK: `StatusEnum["DRAFT"] = 'DRAFT'`, etc.),
+  matching the same pattern already relied on for `TaxRate.StatusEnum`/
+  `Account.ClassEnum` in Decision 5. This means the existing
+  `xero_status: String(created.status)` in `pushInvoiceToXero` was already
+  correct — re-verified rather than assumed, since it looked at first glance
+  like it might be storing a numeric enum value.
+- **`lib/xero/statusLabel.ts` (new)** maps the raw API enum
+  (`DRAFT`/`SUBMITTED`/`AUTHORISED`/`PAID`/`VOIDED`/`DELETED`) to the
+  vocabulary Xero's own web UI shows end users — notably `AUTHORISED` →
+  "Awaiting Payment" — so the app doesn't show a raw enum string the user
+  would need to translate mentally.
+- **UI**: `InvoiceActions.tsx` shows a "Refresh from Xero" button once
+  `xeroInvoiceId` is set (replacing "Push to Xero" at that point, same as
+  before), using the same busy/error pattern as every other button in that
+  component. The "Pushed to Xero (...)" status line now runs through
+  `xeroStatusLabel()` instead of displaying the raw status string.
+- **Deferred**: automatic/scheduled refresh (webhooks or polling) — the user
+  confirmed manual is fine for now; revisit if staleness becomes a real
+  problem.
+- Next up (not yet built): a second Gmail label on the same connection
+  watching for client Purchase Order emails, matched against existing
+  invoices via a review queue — mirrors the existing quote-email pipeline
+  (`gmail_connections`, `unmatched_email_quotes`, `CheckNowModal.tsx`, the
+  3-tier matcher) with a new `unmatched_email_pos` table and `lib/email-po/`
+  module. Deliberately phased as a separate, bigger follow-up rather than
+  bundled into this change.

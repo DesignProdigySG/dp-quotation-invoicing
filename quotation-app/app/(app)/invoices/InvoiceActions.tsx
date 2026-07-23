@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { setInvoiceStatus, deleteInvoice, pushInvoiceToXero } from "./actions";
+import { setInvoiceStatus, deleteInvoice, pushInvoiceToXero, refreshInvoiceFromXero } from "./actions";
+import { xeroStatusLabel } from "@/lib/xero/statusLabel";
 
 export default function InvoiceActions({
   invoiceId,
@@ -66,6 +67,23 @@ export default function InvoiceActions({
     }
   }
 
+  async function refreshFromXero() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await refreshInvoiceFromXero(invoiceId);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        router.refresh();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove() {
     if (!confirm("Delete this invoice? This cannot be undone.")) return;
     setBusy(true);
@@ -95,7 +113,11 @@ export default function InvoiceActions({
             Mark as paid
           </button>
         )}
-        {xeroInvoiceId ? null : (
+        {xeroInvoiceId ? (
+          <button className="btn" disabled={busy} onClick={refreshFromXero}>
+            Refresh from Xero
+          </button>
+        ) : (
           <button className="btn" disabled={busy} onClick={pushToXero}>
             Push to Xero
           </button>
@@ -106,7 +128,7 @@ export default function InvoiceActions({
       </div>
       {xeroInvoiceId && (
         <p className="subtitle" style={{ marginTop: 8 }}>
-          Pushed to Xero ({xeroStatus || "DRAFT"}) on{" "}
+          Pushed to Xero ({xeroStatusLabel(xeroStatus)}) on{" "}
           {xeroPushedAt ? new Date(xeroPushedAt).toLocaleDateString() : "—"}. This is independent
           of this app's own status above — mark it paid in Xero separately.
         </p>
