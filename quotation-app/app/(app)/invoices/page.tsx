@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, computeTotals } from "@/lib/format";
+import { xeroStatusLabel } from "@/lib/xero/statusLabel";
+import CheckXeroStatusButton from "./CheckXeroStatusButton";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status.toLowerCase()}`}>{status}</span>;
@@ -22,6 +24,7 @@ export default async function InvoicesPage() {
             Invoices are created by converting a quotation. Go to a quote to convert it.
           </p>
         </div>
+        <CheckXeroStatusButton />
       </div>
 
       <div className="card">
@@ -54,6 +57,11 @@ export default async function InvoicesPage() {
                     <td>{formatMoney(total, inv.currency)}</td>
                     <td>
                       <StatusBadge status={inv.status} />
+                      {inv.xero_invoice_id && (
+                        <span className="subtitle" style={{ marginLeft: 6 }}>
+                          ({xeroStatusLabel(inv.xero_status)})
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );

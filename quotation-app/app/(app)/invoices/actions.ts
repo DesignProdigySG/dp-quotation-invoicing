@@ -8,6 +8,8 @@ import { getXeroClientForConnection } from "@/lib/xero/client";
 import { findOrCreateXeroContact } from "@/lib/xero/contacts";
 import { buildInvoicePayload } from "@/lib/xero/buildInvoicePayload";
 import { describeXeroError } from "@/lib/xero/describeError";
+import { computeInvoiceUpdateFromXero } from "@/lib/xero/applyXeroInvoiceToRow";
+import type { AppStatus } from "@/lib/xero/nextAppStatus";
 
 export type InvoiceInput = {
   due_date: string | null;
@@ -224,7 +226,7 @@ export async function refreshInvoiceFromXero(invoiceId: string): Promise<{ error
 
   const { data: invoice, error: fetchError } = await supabase
     .from("invoices")
-    .select("xero_invoice_id, invoice_number")
+    .select("xero_invoice_id, invoice_number, status")
     .eq("id", invoiceId)
     .single();
 
@@ -252,16 +254,14 @@ export async function refreshInvoiceFromXero(invoiceId: string): Promise<{ error
       return await recordFailure("Xero didn't return this invoice");
     }
 
+    const update = computeInvoiceUpdateFromXero(
+      { status: invoice.status as AppStatus, invoice_number: invoice.invoice_number ?? "" },
+      fetched
+    );
+
     const { error: updateError } = await supabase
       .from("invoices")
-      .update({
-        xero_status: fetched.status ? String(fetched.status) : null,
-        // Xero often doesn't assign a real invoice number until the draft is
-        // authorised in Xero itself — don't blank out a number this app
-        // already has just because Xero hasn't assigned one yet.
-        invoice_number: fetched.invoiceNumber || invoice.invoice_number,
-        xero_push_error: null,
-      })
+      .update(update)
       .eq("id", invoiceId);
     if (updateError) return { error: updateError.message };
 
@@ -270,5 +270,97 @@ export async function refreshInvoiceFromXero(invoiceId: string): Promise<{ error
     return {};
   } catch (e) {
     return await recordFailure(describeXeroError(e));
+  }
+}
+
+export type CheckXeroStatusResult = {
+  error?: string;
+  checked: number;
+  updatedToPaid: number;
+  updatedToSent: number;
+};
+
+// Xero's own page size ceiling for a getInvoices request — chunk any
+// larger candidate list so a big `iDs` filter can't hit a request-size limit.
+const XERO_GET_INVOICES_CHUNK_SIZE = 100;
+
+// Bulk counterpart to refreshInvoiceFromXero: checks every not-yet-Paid
+// pushed invoice against Xero in as few API calls as possible (Xero's
+// getInvoices supports fetching many specific invoices by ID in one call,
+// unlike getInvoice which only takes one). Each row's update is independent,
+// so a Xero error partway through still leaves the successfully-checked rows
+// correctly updated — the partial counts are returned alongside the error
+// rather than treated as a failed transaction.
+export async function checkInvoicesAgainstXero(): Promise<CheckXeroStatusResult> {
+  const supabase = await createClient();
+
+  const { data: candidates, error: fetchError } = await supabase
+    .from("invoices")
+    .select("id, status, invoice_number, xero_invoice_id")
+    .in("status", ["Draft", "Sent"])
+    .not("xero_invoice_id", "is", null);
+
+  if (fetchError) {
+    return { error: fetchError.message, checked: 0, updatedToPaid: 0, updatedToSent: 0 };
+  }
+  if (!candidates || candidates.length === 0) {
+    return { checked: 0, updatedToPaid: 0, updatedToSent: 0 };
+  }
+
+  let updatedToPaid = 0;
+  let updatedToSent = 0;
+
+  try {
+    const { xero, tenantId } = await getXeroClientForConnection();
+    const byXeroId = new Map(candidates.map((c) => [c.xero_invoice_id as string, c]));
+    const ids = candidates.map((c) => c.xero_invoice_id as string);
+
+    for (let i = 0; i < ids.length; i += XERO_GET_INVOICES_CHUNK_SIZE) {
+      const chunk = ids.slice(i, i + XERO_GET_INVOICES_CHUNK_SIZE);
+      const { body } = await xero.accountingApi.getInvoices(
+        tenantId,
+        undefined,
+        undefined,
+        undefined,
+        chunk
+      );
+
+      for (const fetched of body.invoices || []) {
+        const local = fetched.invoiceID ? byXeroId.get(fetched.invoiceID) : undefined;
+        if (!local) continue;
+
+        const update = computeInvoiceUpdateFromXero(
+          { status: local.status as AppStatus, invoice_number: local.invoice_number ?? "" },
+          fetched
+        );
+
+        const { error: updateError } = await supabase
+          .from("invoices")
+          .update(update)
+          .eq("id", local.id);
+        if (updateError) {
+          return {
+            error: updateError.message,
+            checked: candidates.length,
+            updatedToPaid,
+            updatedToSent,
+          };
+        }
+
+        if (update.status === "Paid") updatedToPaid++;
+        else if (update.status === "Sent") updatedToSent++;
+      }
+    }
+
+    revalidatePath("/invoices");
+    revalidatePath("/board");
+    return { checked: candidates.length, updatedToPaid, updatedToSent };
+  } catch (e) {
+    return {
+      error: describeXeroError(e),
+      checked: candidates.length,
+      updatedToPaid,
+      updatedToSent,
+    };
   }
 }
