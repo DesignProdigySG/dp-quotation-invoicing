@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listGmailLabels } from "./actions";
 import SettingsClient from "./SettingsClient";
+import PoSettingsClient from "./PoSettingsClient";
 import ProfileForm from "./ProfileForm";
 import XeroSettings from "./XeroSettings";
 
@@ -27,7 +28,9 @@ export default async function SettingsPage({
 
   const { data: connection } = await supabase
     .from("gmail_connections")
-    .select("email, watched_label_id, watched_label_name, last_checked_at")
+    .select(
+      "email, watched_label_id, watched_label_name, last_checked_at, po_watched_label_id, po_watched_label_name, po_last_checked_at"
+    )
     .eq("owner_id", user.id)
     .maybeSingle();
 
@@ -53,7 +56,7 @@ export default async function SettingsPage({
 
   let labels: { id: string; name: string }[] = [];
   let labelsError: string | null = null;
-  if (connection && !connection.watched_label_id) {
+  if (connection && (!connection.watched_label_id || !connection.po_watched_label_id)) {
     try {
       labels = await listGmailLabels();
     } catch (e) {
@@ -82,6 +85,9 @@ export default async function SettingsPage({
           connectedNotice={params.gmail_connected === "1"}
           errorNotice={params.gmail_error || null}
         />
+        {connection && (
+          <PoSettingsClient connection={connection} labels={labels} labelsError={labelsError} />
+        )}
       </div>
 
       <div className="card">

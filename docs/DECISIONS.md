@@ -426,3 +426,65 @@ not-yet-Paid invoices at once from the Invoices list.
   constraint via `pg_get_constraintdef`, and that no additional abstraction
   beyond the two small pure-function files above was warranted for just two
   call sites).
+
+## Decision 8: PO-matching Gmail pipeline
+
+Last piece of the original three-part Xero/invoicing wishlist. A second
+Gmail label on the same connected account watches for client Purchase Order
+emails; a "Check now" flow (mirroring the quote pipeline exactly) surfaces
+recent candidates for review, and confirming one attaches the PO's info to
+an existing **invoice** (not a new document) via its `reference`/`notes`.
+
+Before implementing, every file this mirrors was re-read directly this
+session (not assumed from memory) to confirm exact shapes: `gmail_connections`
+and `unmatched_email_quotes` columns (via `information_schema.columns`),
+`lib/email-quote/gmailClient.ts`, `matchClient.ts`, `fuzzyMatchClient.ts`,
+`extractQuoteFromEmail.ts`, `settings/actions.ts`, `CheckNowModal.tsx`,
+`SettingsClient.tsx`, `settings/page.tsx`, `review/page.tsx`,
+`review/ReviewQueue.tsx`, `review/actions.ts`, and the Gmail OAuth callback
+route.
+
+- **No processed-label tracking for PO emails, deliberately.** The quote
+  pipeline auto-creates a "Quotation Bot Processed" Gmail label at OAuth
+  connect time (`app/api/auth/gmail/callback/route.ts`) so a re-check doesn't
+  resurface already-handled emails. Replicating that for PO emails would need
+  either a Gmail reconnect or a lazy find-or-create step — the user confirmed
+  it's not worth it: an already-processed PO email showing up again in a
+  later "Check now" isn't a real problem. So `gmail_connections` only gained
+  `po_watched_label_id`/`po_watched_label_name`/`po_last_checked_at` — no
+  `po_processed_label_id`, no label applied after processing.
+- **`unmatched_email_pos` (new table)** mirrors `unmatched_email_quotes`'s
+  exact shape (same RLS pattern: `owner_id = auth.uid()`), but resolves
+  against `suggested_invoice_id`/`resolved_invoice_id` (both referencing
+  `invoices`) instead of drafting a new quotation.
+- **`lib/email-quote/gmailClient.ts`'s `listCandidateMessages` generalized**
+  to take `watchedLabelId`/`processedLabelId` as explicit parameters instead
+  of reading them off the connection row directly — the exact same
+  pagination/dedup/sort logic is now shared by both the quote and PO flows
+  rather than duplicated.
+- **`lib/email-po/` (new, mirrors `lib/email-quote/`)**: `extractPoFromEmail`
+  (same Haiku-based extraction pattern as `extractQuoteFromEmail`, different
+  schema: `po_number`, `referenced_invoice_number`, `amount`, `client_name`),
+  `matchInvoiceForPo` (deterministic case-insensitive string match against a
+  client's own invoices — no AI tier for this step; `findClientByEmail`/
+  `fuzzyMatchClient` already do the fuzzy work of identifying the *client*,
+  reused as-is), `insertUnmatchedPo` (mirrors `insertUnmatchedQuote` exactly,
+  service-role client).
+- **`processSelectedPoMessages`** mirrors `processSelectedGmailMessages`'s
+  exact 3-tier client-identification shape, adding a 4th step once a client
+  is known: fetch that client's invoices and run `matchInvoiceForPo` against
+  the extracted PO/invoice number.
+- **Review UI** (`app/(app)/review/purchase-orders/`) is deliberately
+  simpler than the quote `ReviewQueue.tsx` — no line items/currency/GST,
+  since this isn't drafting a new document. Just a client dropdown, an
+  invoice dropdown filtered to that client, and editable reference/note
+  fields pre-filled from the extraction. `resolveUnmatchedEmailPo` only
+  writes `reference` if the invoice's was empty (never overwrites an
+  existing one) and always appends `note` onto `notes` (newline-joined, not
+  overwritten).
+- **Settings UI**: `PoSettingsClient.tsx`/`CheckPoNowModal.tsx` are focused
+  duplicates of `SettingsClient.tsx`/`CheckNowModal.tsx` rather than
+  parameterized — `CheckNowModal.tsx` currently imports its quote actions
+  directly and isn't set up for injection; revisit generalizing if a third
+  such flow ever shows up. Rendered as a second block inside the existing
+  Gmail card (same connection, no new "Connect" step).

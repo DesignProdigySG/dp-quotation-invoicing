@@ -48,9 +48,10 @@ const MAX_CANDIDATE_MESSAGES = 200;
 const METADATA_FETCH_CONCURRENCY = 10;
 
 export async function listCandidateMessages(
-  connection: GmailConnection
+  connection: GmailConnection,
+  watchedLabelId: string,
+  processedLabelId: string | null
 ): Promise<GmailCandidate[]> {
-  if (!connection.watched_label_id) return [];
   const gmail = getGmailClientForConnection(connection);
 
   const messageRefs: { id: string; threadId: string }[] = [];
@@ -58,7 +59,7 @@ export async function listCandidateMessages(
   do {
     const listRes = await gmail.users.messages.list({
       userId: "me",
-      labelIds: [connection.watched_label_id],
+      labelIds: [watchedLabelId],
       maxResults: 100,
       pageToken,
     });
@@ -85,10 +86,7 @@ export async function listCandidateMessages(
       })
     );
     for (const { id, threadId, message } of results) {
-      if (
-        connection.processed_label_id &&
-        message.labelIds?.includes(connection.processed_label_id)
-      ) {
+      if (processedLabelId && message.labelIds?.includes(processedLabelId)) {
         continue;
       }
       const headers = message.payload?.headers || [];

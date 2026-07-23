@@ -22,6 +22,7 @@ export default async function AppLayout({
           <Link href="/quotes">Quotes</Link>
           <Link href="/invoices">Invoices</Link>
           <Link href="/review">Needs review</Link>
+          <Link href="/review/purchase-orders">Review POs</Link>
           <Link href="/settings">Settings</Link>
         </nav>
         <div className="right">
