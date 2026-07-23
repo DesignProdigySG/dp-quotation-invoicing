@@ -7,6 +7,7 @@ import type { LineItemInput } from "../quotes/actions";
 import { getXeroClientForConnection } from "@/lib/xero/client";
 import { findOrCreateXeroContact } from "@/lib/xero/contacts";
 import { buildInvoicePayload } from "@/lib/xero/buildInvoicePayload";
+import { describeXeroError } from "@/lib/xero/describeError";
 
 export type InvoiceInput = {
   due_date: string | null;
@@ -182,6 +183,6 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<{ error?: st
     revalidatePath("/invoices");
     return {};
   } catch (e) {
-    return await recordFailure(e instanceof Error ? e.message : "Unknown error pushing to Xero");
+    return await recordFailure(describeXeroError(e));
   }
 }
