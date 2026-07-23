@@ -265,3 +265,40 @@ live schema/RLS and Xero's official OpenAPI spec directly rather than assuming.
   through the app's own code path). Everything else (`buildInvoicePayload.ts`
   as a pure function, `tsc`/`next build`, the migration applied and confirmed
   live) was verified directly this session.
+
+### Post-ship fixes from the real connect + first real push
+
+- **`accounting.transactions` doesn't exist as a scope on newer Xero apps** —
+  Xero migrated to granular per-resource scopes; the correct one for creating
+  invoices is `accounting.invoices`. Found via an `invalid_scope` error on
+  Xero's own authorize page (rejected before login), not a downstream 403.
+- **The OAuth callback route needed `export const maxDuration = 60`** — it
+  does an OIDC discovery round-trip (a fresh `XeroClient` per request has no
+  cached issuer metadata from `/start`), the token exchange, a tenant lookup,
+  and a Supabase write, all sequential; comfortably past Vercel's 10s default.
+- **Every step in the callback route after the token exchange must be wrapped
+  in try/catch, not just the "expected" failure points.** The real first
+  failure was `encrypt()` throwing because `XERO_TOKEN_ENCRYPTION_KEY` was
+  never actually set in Vercel — uncaught, so the route crashed with a raw
+  HTTP 500 instead of redirecting with a message. Worse, this happened *after*
+  Xero's one-time authorization code had already been successfully exchanged,
+  so the crash both hid the real cause and burned the code, making a retry
+  fail with an unrelated-looking `invalid_grant (Authorization code not
+  found)`. Lesson: in a one-shot external-redirect flow, anything that can
+  throw after the irreversible step must redirect-on-catch, with no exceptions
+  for "this shouldn't fail."
+- **`xero-node`'s Axios errors have a useless top-level `.message`** ("Request
+  failed with status code 400") — the real reason lives in `.response.data`.
+  `lib/xero/describeError.ts` pulls it out; without it, every Xero API
+  rejection showed as "Unknown error pushing to Xero" with zero diagnostic
+  value.
+- **The real first push failed with `"The TaxType code 'INPUTY24' cannot be
+  used with account code '200.03'."`** — an input (purchase-side) GST tax rate
+  had been picked in Settings for what is always a sales invoice (ACCREC).
+  Fixed at the root rather than just documented: `lib/xero/settings.ts` now
+  filters `listTaxRates()` to `canApplyToRevenue` and `listAccounts()` to
+  `_class === Account.ClassEnum.REVENUE` (Xero's own account-class field,
+  exposed as `_class` since `class` is a reserved word in the generated SDK),
+  so an incompatible tax rate or non-revenue account can no longer be
+  selected in the first place — this app only ever creates sales invoices, so
+  neither picker should have offered anything else to begin with.
