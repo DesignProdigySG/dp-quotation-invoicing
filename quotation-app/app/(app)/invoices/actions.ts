@@ -155,14 +155,37 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<{ error?: st
         .eq("id", invoiceId);
     }
 
-    const { body } = await xero.accountingApi.createInvoices(
-      tenantId,
-      { invoices: [payload] },
-      true,
-      undefined,
-      idempotencyKey
-    );
-    const created = body.invoices?.[0];
+    let created;
+    try {
+      const { body } = await xero.accountingApi.createInvoices(
+        tenantId,
+        { invoices: [payload] },
+        true,
+        undefined,
+        idempotencyKey
+      );
+      created = body.invoices?.[0];
+    } catch (e) {
+      // Xero rejects a retried idempotency key outright if the request body
+      // differs from the original attempt ("used with a different
+      // request") — confirmed directly, not theoretical: this happened when
+      // retrying after fixing a bad tax-rate/account-code Settings mapping,
+      // since that changes the payload. If Xero gave us any HTTP response at
+      // all (even a rejection), the key is now spent for that payload, so
+      // clear it — the next attempt (same or different data) needs a fresh
+      // one. Only keep the key when there's truly no response at all (a
+      // network/timeout failure where it's genuinely unknown whether Xero
+      // received the request) — that's the one case where retrying with the
+      // same key and same payload is both safe and necessary.
+      const xeroResponded = !!(e && typeof e === "object" && "response" in (e as object));
+      if (xeroResponded) {
+        await supabase
+          .from("invoices")
+          .update({ xero_idempotency_key: null })
+          .eq("id", invoiceId);
+      }
+      return await recordFailure(describeXeroError(e));
+    }
     if (!created?.invoiceID) {
       return await recordFailure("Xero didn't return a created invoice");
     }

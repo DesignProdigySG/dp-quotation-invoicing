@@ -302,3 +302,17 @@ live schema/RLS and Xero's official OpenAPI spec directly rather than assuming.
   so an incompatible tax rate or non-revenue account can no longer be
   selected in the first place — this app only ever creates sales invoices, so
   neither picker should have offered anything else to begin with.
+- **Retrying after fixing the tax-rate mapping above then failed with
+  `"Idempotency Key: ... is used with a different request."`** — confirmed
+  real, not hypothetical: the original persisted-idempotency-key design
+  (`app/(app)/invoices/actions.ts`) assumed a retry always means "the exact
+  same request, safe to reuse the key," but a retry can also mean "the
+  payload legitimately changed" (here, because the Settings misconfiguration
+  was fixed in between attempts), and Xero correctly refuses to honor the old
+  key against a different body. Fixed by only *keeping* the idempotency key
+  when there's no HTTP response from Xero at all (a true network/timeout
+  failure, where it's genuinely unknown whether Xero received the request —
+  the one case retrying with the same key is both safe and required); any
+  definitive response, including a rejection, spends the key and clears it so
+  the next attempt gets a fresh one. This self-heals invoices that were stuck
+  from the earlier bug without needing a manual DB fix.
