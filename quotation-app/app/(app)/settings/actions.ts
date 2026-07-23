@@ -20,6 +20,9 @@ import { insertUnmatchedQuote } from "@/lib/email-quote/insertUnmatchedQuote";
 import type { Json } from "@/types/database.types";
 import { getXeroClientForConnection } from "@/lib/xero/client";
 import { listTaxRates, listAccounts } from "@/lib/xero/settings";
+import { extractPoFromEmail } from "@/lib/email-po/extractPoFromEmail";
+import { matchInvoiceForPo } from "@/lib/email-po/matchInvoiceForPo";
+import { insertUnmatchedPo } from "@/lib/email-po/insertUnmatchedPo";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -177,7 +180,11 @@ export async function listUnprocessedGmailCandidates(): Promise<{
       return { candidates: [], error: "Choose a label to watch first" };
     }
 
-    const candidates = await listCandidateMessages(connection);
+    const candidates = await listCandidateMessages(
+      connection,
+      connection.watched_label_id,
+      connection.processed_label_id
+    );
 
     await supabase
       .from("gmail_connections")
@@ -375,6 +382,178 @@ export async function processSelectedGmailMessages(
 
     revalidatePath("/settings");
     revalidatePath("/review");
+    return result;
+  } catch (e) {
+    result.errors.push(e instanceof Error ? e.message : "Unknown error");
+    return result;
+  }
+}
+
+export async function savePoWatchedLabel(
+  labelId: string,
+  labelName: string
+): Promise<{ error?: string }> {
+  try {
+    const { supabase, user } = await requireUser();
+    const { error } = await supabase
+      .from("gmail_connections")
+      .update({
+        po_watched_label_id: labelId,
+        po_watched_label_name: labelName,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("owner_id", user.id);
+    if (error) return { error: error.message };
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
+export async function listUnprocessedPoCandidates(): Promise<{
+  candidates: GmailCandidate[];
+  error?: string;
+}> {
+  try {
+    const { supabase, user } = await requireUser();
+    const { data: connection, error } = await supabase
+      .from("gmail_connections")
+      .select("*")
+      .eq("owner_id", user.id)
+      .single();
+    if (error || !connection) return { candidates: [], error: "Gmail is not connected" };
+    if (!connection.po_watched_label_id) {
+      return { candidates: [], error: "Choose a label to watch first" };
+    }
+
+    const candidates = await listCandidateMessages(
+      connection,
+      connection.po_watched_label_id,
+      null
+    );
+
+    await supabase
+      .from("gmail_connections")
+      .update({ po_last_checked_at: new Date().toISOString() })
+      .eq("owner_id", user.id);
+
+    return { candidates };
+  } catch (e) {
+    return { candidates: [], error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
+export type ProcessSelectedPoResult = {
+  processed: number;
+  suggested: number;
+  unmatched: number;
+  failed: number;
+  errors: string[];
+};
+
+export async function processSelectedPoMessages(
+  messageIds: string[]
+): Promise<ProcessSelectedPoResult> {
+  const result: ProcessSelectedPoResult = {
+    processed: 0,
+    suggested: 0,
+    unmatched: 0,
+    failed: 0,
+    errors: [],
+  };
+
+  try {
+    const { supabase, user } = await requireUser();
+    const { data: connection, error: connError } = await supabase
+      .from("gmail_connections")
+      .select("*")
+      .eq("owner_id", user.id)
+      .single();
+    if (connError || !connection) {
+      result.errors.push("Gmail is not connected");
+      return result;
+    }
+
+    const { data: clientsData, error: clientsError } = await supabase
+      .from("clients")
+      .select(
+        "id, name, contact_email, billing_address, default_currency, default_gst_rate, display_currency_preference, ai_instructions"
+      );
+    if (clientsError) {
+      result.errors.push(clientsError.message);
+      return result;
+    }
+    const clients = (clientsData || []) as ClientForMatching[];
+
+    const gmail = getGmailClientForConnection(connection);
+
+    for (const messageId of messageIds) {
+      try {
+        const messageRes = await gmail.users.messages.get({
+          userId: "me",
+          id: messageId,
+          format: "full",
+        });
+        const message = messageRes.data;
+        const headers = message.payload?.headers || [];
+        const subject = headers.find((h) => h.name === "Subject")?.value || "";
+        const from = headers.find((h) => h.name === "From")?.value || "";
+        const bodyText = decodeBody(message.payload);
+
+        // Tier 1: deterministic (exact email, then same-domain fallback).
+        const headerEmail = parseSenderEmail(from);
+        let match: {
+          client: ClientForMatching;
+          source: "exact_email" | "email_domain" | "ai_fuzzy";
+        } | null = headerEmail ? findClientByEmail(clients, headerEmail) : null;
+
+        // Tier 2: cheap fuzzy match, only if tier 1 found nothing.
+        if (!match) {
+          const fuzzy = await fuzzyMatchClient({ subject, from, body: bodyText, clients });
+          if (fuzzy.client_id) {
+            const client = clients.find((c) => c.id === fuzzy.client_id);
+            if (client) match = { client, source: "ai_fuzzy" as const };
+          }
+        }
+
+        // Tier 3: extraction.
+        const extracted = await extractPoFromEmail({ subject, from, body: bodyText });
+
+        // Tier 4: once a client is identified, try to match a stated
+        // PO/invoice number against that client's own invoices.
+        let suggestedInvoiceId: string | null = null;
+        if (match) {
+          const { data: clientInvoices } = await supabase
+            .from("invoices")
+            .select("id, invoice_number, reference")
+            .eq("client_id", match.client.id);
+          const invoiceMatch = matchInvoiceForPo(extracted, clientInvoices || []);
+          suggestedInvoiceId = invoiceMatch?.id ?? null;
+        }
+
+        await insertUnmatchedPo({
+          owner_id: user.id,
+          sender_email: headerEmail || from,
+          sender_name: extracted.client_name ?? null,
+          subject,
+          parsed_data: extracted as unknown as Json,
+          suggested_client_id: match?.client.id ?? null,
+          suggested_client_source: match?.source ?? null,
+          suggested_invoice_id: suggestedInvoiceId,
+        });
+
+        result.processed++;
+        if (match) result.suggested++;
+        else result.unmatched++;
+      } catch (e) {
+        result.failed++;
+        result.errors.push(e instanceof Error ? e.message : "Unknown error processing a message");
+      }
+    }
+
+    revalidatePath("/settings");
+    revalidatePath("/review/purchase-orders");
     return result;
   } catch (e) {
     result.errors.push(e instanceof Error ? e.message : "Unknown error");

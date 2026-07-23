@@ -109,6 +109,9 @@ export type Database = {
           email: string
           last_checked_at: string | null
           owner_id: string
+          po_last_checked_at: string | null
+          po_watched_label_id: string | null
+          po_watched_label_name: string | null
           processed_label_id: string | null
           refresh_token_encrypted: string
           updated_at: string
@@ -120,6 +123,9 @@ export type Database = {
           email: string
           last_checked_at?: string | null
           owner_id: string
+          po_last_checked_at?: string | null
+          po_watched_label_id?: string | null
+          po_watched_label_name?: string | null
           processed_label_id?: string | null
           refresh_token_encrypted: string
           updated_at?: string
@@ -131,6 +137,9 @@ export type Database = {
           email?: string
           last_checked_at?: string | null
           owner_id?: string
+          po_last_checked_at?: string | null
+          po_watched_label_id?: string | null
+          po_watched_label_name?: string | null
           processed_label_id?: string | null
           refresh_token_encrypted?: string
           updated_at?: string
@@ -410,6 +419,76 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unmatched_email_pos: {
+        Row: {
+          created_at: string
+          id: string
+          owner_id: string
+          parsed_data: Json
+          resolved_at: string | null
+          resolved_invoice_id: string | null
+          sender_email: string
+          sender_name: string | null
+          status: string
+          subject: string | null
+          suggested_client_id: string | null
+          suggested_client_source: string | null
+          suggested_invoice_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_id: string
+          parsed_data: Json
+          resolved_at?: string | null
+          resolved_invoice_id?: string | null
+          sender_email: string
+          sender_name?: string | null
+          status?: string
+          subject?: string | null
+          suggested_client_id?: string | null
+          suggested_client_source?: string | null
+          suggested_invoice_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          parsed_data?: Json
+          resolved_at?: string | null
+          resolved_invoice_id?: string | null
+          sender_email?: string
+          sender_name?: string | null
+          status?: string
+          subject?: string | null
+          suggested_client_id?: string | null
+          suggested_client_source?: string | null
+          suggested_invoice_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unmatched_email_pos_resolved_invoice_id_fkey"
+            columns: ["resolved_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unmatched_email_pos_suggested_client_id_fkey"
+            columns: ["suggested_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "unmatched_email_pos_suggested_invoice_id_fkey"
+            columns: ["suggested_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
         ]
