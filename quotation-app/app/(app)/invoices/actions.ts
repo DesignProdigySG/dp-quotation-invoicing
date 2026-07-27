@@ -25,6 +25,7 @@ export type InvoiceInput = {
 export type CreateInvoiceInput = {
   client_id: string;
   due_date: string | null;
+  reference?: string | null;
   currency: string;
   gst_rate: number;
   gst_applicable: boolean;
@@ -55,6 +56,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
       owner_id: user.id,
       client_id: input.client_id,
       due_date: input.due_date,
+      reference: input.reference || null,
       currency: input.currency,
       gst_rate: input.gst_rate,
       gst_applicable: input.gst_applicable,

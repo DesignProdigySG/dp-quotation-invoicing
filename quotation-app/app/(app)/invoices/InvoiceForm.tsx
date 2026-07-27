@@ -198,6 +198,7 @@ export default function InvoiceForm({
         const created = await createInvoice({
           client_id: clientId,
           due_date: dueDate || null,
+          reference: reference || null,
           currency,
           gst_rate: gstRate,
           gst_applicable: gstApplicable,
@@ -260,7 +261,7 @@ export default function InvoiceForm({
     <div className="card">
       {error && <div className="error">{error}</div>}
 
-      {!isCreating && !reference && !warningDismissed && (
+      {!reference && !warningDismissed && (
         <div className="warning">
           No reference number set.
           <button
@@ -296,16 +297,14 @@ export default function InvoiceForm({
             onChange={(e) => setDueDate(e.target.value)}
           />
         </div>
-        {!isCreating && (
-          <div>
-            <label htmlFor="reference">Reference</label>
-            <input
-              id="reference"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
-            />
-          </div>
-        )}
+        <div>
+          <label htmlFor="reference">Reference</label>
+          <input
+            id="reference"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+          />
+        </div>
         <div>
           <label htmlFor="currency">Currency</label>
           <input
