@@ -616,3 +616,31 @@ bigger lift than the rest; deferred as a stretch goal, not built.
   needs an added `gmail.send` OAuth scope and a one-time reconnect since
   existing refresh tokens can't retroactively gain new scopes) — user
   decided not to add either for now.
+
+## Decision 11: Surface Xero's VOIDED invoice status properly
+
+User asked whether a Xero invoice's VOIDED status could be synced. Checking
+the code directly (before assuming a gap existed) showed the raw sync was
+already half-working: `computeInvoiceUpdateFromXero`
+(`lib/xero/applyXeroInvoiceToRow.ts`) always writes whatever Xero's status
+is into `xero_status`, and `xeroStatusLabel()` already mapped `VOIDED` →
+"Voided" for display — so a voided invoice's real status *was* already
+being pulled and shown, once refreshed. Two real gaps found and fixed:
+
+- **`checkInvoicesAgainstXero`'s bulk "Check Xero status" button excluded
+  locally-Paid invoices** (`.in("status", ["Draft", "Sent"])`), so a Paid
+  invoice voided afterward in Xero (e.g. a reversed payment) would only be
+  caught by manually refreshing that one invoice, not the bulk button.
+  Fixed by dropping that filter — every pushed invoice (any local status)
+  now gets checked, still batched into as few Xero API calls as possible.
+- **A voided invoice looked visually identical to a normal one** — the
+  `(Voided)` hint rendered in the same quiet gray `.subtitle` style as
+  `(Awaiting Payment)`. Added a `.xero-voided` CSS class (reusing the
+  existing `--danger` variable already used by `.error`/`.btn-danger`,
+  not a new color) applied on both the Invoices list and the invoice
+  detail page specifically when `xero_status === "VOIDED"`.
+- **Deliberately not revisited**: Decision 7's choice to keep
+  `invoices.status` at exactly `'Draft' | 'Sent' | 'Paid'`. `VOIDED` still
+  doesn't map to anything in `nextAppStatus` — it's not a state the app's
+  own Draft→Sent→Paid workflow understands, so this stays a display-only
+  fix to the existing `xero_status` sync, not a new state machine.

@@ -333,6 +333,11 @@ textarea:focus {
   z-index: 90;
 }
 
+.xero-voided {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .login-wrap {
   min-height: 100vh;
   display: flex;

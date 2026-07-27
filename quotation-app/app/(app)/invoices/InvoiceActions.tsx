@@ -128,9 +128,12 @@ export default function InvoiceActions({
       </div>
       {xeroInvoiceId && (
         <p className="subtitle" style={{ marginTop: 8 }}>
-          Pushed to Xero ({xeroStatusLabel(xeroStatus)}) on{" "}
-          {xeroPushedAt ? new Date(xeroPushedAt).toLocaleDateString() : "—"}. This is independent
-          of this app's own status above — mark it paid in Xero separately.
+          Pushed to Xero (
+          <span className={xeroStatus === "VOIDED" ? "xero-voided" : undefined}>
+            {xeroStatusLabel(xeroStatus)}
+          </span>
+          ) on {xeroPushedAt ? new Date(xeroPushedAt).toLocaleDateString() : "—"}. This is
+          independent of this app's own status above — mark it paid in Xero separately.
         </p>
       )}
     </div>

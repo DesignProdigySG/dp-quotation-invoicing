@@ -58,7 +58,10 @@ export default async function InvoicesPage() {
                     <td>
                       <StatusBadge status={inv.status} />
                       {inv.xero_invoice_id && (
-                        <span className="subtitle" style={{ marginLeft: 6 }}>
+                        <span
+                          className={inv.xero_status === "VOIDED" ? "xero-voided" : "subtitle"}
+                          style={{ marginLeft: 6 }}
+                        >
                           ({xeroStatusLabel(inv.xero_status)})
                         </span>
                       )}
