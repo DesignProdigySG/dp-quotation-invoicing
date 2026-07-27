@@ -394,6 +394,10 @@ export type Database = {
           owner_id: string
           quote_date: string
           quote_number: string | null
+          salesforce_push_error: string | null
+          salesforce_pushed_at: string | null
+          salesforce_quote_id: string | null
+          salesforce_quote_number: string | null
           status: string
           updated_at: string
           valid_until: string | null
@@ -413,6 +417,10 @@ export type Database = {
           owner_id: string
           quote_date?: string
           quote_number?: string | null
+          salesforce_push_error?: string | null
+          salesforce_pushed_at?: string | null
+          salesforce_quote_id?: string | null
+          salesforce_quote_number?: string | null
           status?: string
           updated_at?: string
           valid_until?: string | null
@@ -432,6 +440,10 @@ export type Database = {
           owner_id?: string
           quote_date?: string
           quote_number?: string | null
+          salesforce_push_error?: string | null
+          salesforce_pushed_at?: string | null
+          salesforce_quote_id?: string | null
+          salesforce_quote_number?: string | null
           status?: string
           updated_at?: string
           valid_until?: string | null
@@ -452,6 +464,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      salesforce_connections: {
+        Row: {
+          connected_at: string | null
+          connected_by: string | null
+          id: number
+          instance_url: string | null
+          refresh_token_encrypted: string | null
+          updated_at: string
+        }
+        Insert: {
+          connected_at?: string | null
+          connected_by?: string | null
+          id?: number
+          instance_url?: string | null
+          refresh_token_encrypted?: string | null
+          updated_at?: string
+        }
+        Update: {
+          connected_at?: string | null
+          connected_by?: string | null
+          id?: number
+          instance_url?: string | null
+          refresh_token_encrypted?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       unmatched_email_pos: {
         Row: {

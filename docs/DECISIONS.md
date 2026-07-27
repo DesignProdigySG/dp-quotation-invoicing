@@ -680,3 +680,69 @@ not what's currently typed.
   proceed knowing what will be sent — was judged the better tradeoff.
 - **`app/(app)/invoices/[id]/page.tsx`** wraps both `InvoiceActions` and
   `InvoiceForm` in `<FormDirtyProvider>`.
+
+## Decision 13: Salesforce integration — Phase A (OAuth connect only)
+
+Starting the Salesforce quote-number integration (the third scoped item,
+picked up after the unsaved-changes guard). Confirmed with the user before
+building: an existing Salesforce org, quotes on the **standard `Quote`
+object** (child of `Opportunity`), an Opportunity created per deal (not
+matched against an existing one), and a **single shared connection**
+(mirrors Xero, not per-user like Gmail).
+
+**Deliberately scoped to OAuth connect only, not the actual quote push.**
+Salesforce's `Quote`/`Opportunity`/`QuoteLineItem` objects have real,
+org-specific configuration (required `Opportunity` fields, `StageName`
+picklist values, and whether `QuoteLineItem` requires a `PricebookEntryId`
+— it does on the standard object, which doesn't map cleanly onto this
+app's freeform line-item text) that can't be known without connecting
+first and inspecting the org live via Salesforce's `describe` API — same
+reasoning as why Xero's tax-rate/account-code settings were fetched live
+rather than hardcoded (Decision 5). Phase B (the actual push) is a
+separate, future plan once connected.
+
+- **`jsforce`** (new dependency) — the standard Node library for the
+  Salesforce REST API; no Salesforce-maintained SDK as polished as
+  `xero-node` exists. Checked its own dependency tree directly: it
+  introduces no new high-severity `npm audit` findings — the flagged ones
+  (`glob`/`minimatch`/`rimraf`/`brace-expansion`) all trace to the
+  pre-existing `googleapis` dependency, not jsforce.
+- **`salesforce_connections` (new table)**: same singleton shape as
+  `xero_connections` (`id=1`, `for all using(true)` RLS — the third
+  deliberately-shared, non-owner-scoped table in this schema). Has one
+  field with no Xero equivalent: **`instance_url`** — each Salesforce org
+  has its own API base URL, returned during token exchange and required on
+  every subsequent API call, so it's persisted alongside the refresh
+  token.
+- **`quotations` gets `salesforce_quote_id`/`salesforce_quote_number`/
+  `salesforce_pushed_at`/`salesforce_push_error`** — the same shape as
+  `invoices.xero_*`, added now even though Phase A doesn't populate them
+  yet. **Deliberately `text`, not `uuid`** — unlike
+  `clients.xero_contact_id` (which happens to be typed `uuid` since Xero's
+  GUIDs are valid UUIDs), Salesforce record IDs are 15/18-character
+  alphanumeric strings, not valid UUIDs. Copying the Xero column type here
+  would have been a real, easy-to-miss bug caught by checking directly
+  rather than pattern-matching blind.
+- **OAuth routes** (`app/api/auth/salesforce/{start,callback}`) apply the
+  lessons already paid for during Xero's post-ship fixes from the start,
+  rather than rediscovering them: `maxDuration = 60` on both routes, every
+  step after the token exchange wrapped in try/catch redirecting with the
+  real error message, and (unlike jsforce's `OAuth2.requestToken()`, which
+  doesn't validate state itself) an explicit state-cookie-vs-query-param
+  comparison in the callback before proceeding — Xero's equivalent check
+  was implicitly handled inside `openid-client`'s `apiCallback()`, so this
+  had to be added explicitly here.
+- **`lib/salesforce/client.ts`** eagerly calls
+  `oauth2.refreshToken(storedRefreshToken)` once per invocation and
+  persists the result before returning, mirroring `lib/xero/client.ts`'s
+  pattern exactly — even though Salesforce doesn't rotate refresh tokens by
+  default the way Xero does, an org's Connected App policy can enable
+  rotation, so persisting defensively costs nothing and doesn't assume a
+  behavior that could differ by org.
+- **Settings UI** (`SalesforceSettings.tsx`) is connect/disconnect-status
+  only in Phase A — explicitly says "quote push isn't built yet" rather
+  than implying more than what's actually wired up.
+- **Shipped to a preview deployment first, not merged to `main`** — the
+  user asked to hold off on merging until the OAuth round-trip is
+  confirmed working against a real Connected App, rather than shipping
+  straight to production like every previous integration this session.

@@ -5,6 +5,7 @@ import SettingsClient from "./SettingsClient";
 import PoSettingsClient from "./PoSettingsClient";
 import ProfileForm from "./ProfileForm";
 import XeroSettings from "./XeroSettings";
+import SalesforceSettings from "./SalesforceSettings";
 
 export default async function SettingsPage({
   searchParams,
@@ -14,6 +15,8 @@ export default async function SettingsPage({
     gmail_error?: string;
     xero_connected?: string;
     xero_error?: string;
+    salesforce_connected?: string;
+    salesforce_error?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -51,6 +54,12 @@ export default async function SettingsPage({
   const { data: xeroConnection } = await supabase
     .from("xero_connections")
     .select("tenant_name, gst_tax_type, gst_tax_rate, no_gst_tax_type, default_account_code")
+    .eq("id", 1)
+    .maybeSingle();
+
+  const { data: salesforceConnection } = await supabase
+    .from("salesforce_connections")
+    .select("instance_url")
     .eq("id", 1)
     .maybeSingle();
 
@@ -97,6 +106,16 @@ export default async function SettingsPage({
           connection={xeroConnection || null}
           connectedNotice={params.xero_connected === "1"}
           errorNotice={params.xero_error || null}
+        />
+      </div>
+
+      <div className="card">
+        <h2>Salesforce</h2>
+        <p className="subtitle">Generate quote numbers from Design Prodigy's Salesforce org.</p>
+        <SalesforceSettings
+          connection={salesforceConnection || null}
+          connectedNotice={params.salesforce_connected === "1"}
+          errorNotice={params.salesforce_error || null}
         />
       </div>
     </>

@@ -99,6 +99,11 @@ other session or agent.
 - `XERO_CLIENT_ID`, `XERO_CLIENT_SECRET`, `XERO_REDIRECT_URI`,
   `XERO_TOKEN_ENCRYPTION_KEY` (separate encryption key from Gmail's — same
   `lib/crypto.ts`, parameterized by env-var name)
+- `SALESFORCE_CLIENT_ID`, `SALESFORCE_CLIENT_SECRET`, `SALESFORCE_REDIRECT_URI`,
+  `SALESFORCE_TOKEN_ENCRYPTION_KEY` (same `lib/crypto.ts` pattern as Xero's),
+  `SALESFORCE_LOGIN_URL` (optional, defaults to `https://login.salesforce.com`
+  — set to `https://test.salesforce.com` for a sandbox org). OAuth-connect
+  only so far (Decision 13 in `docs/DECISIONS.md`) — no quote push yet.
 - `ANTHROPIC_API_KEY`
 - `EMAIL_QUOTE_WEBHOOK_SECRET`, `CRON_SECRET` — both vestigial (the n8n webhook and
   the cron job were superseded by the in-app pipeline above); harmless to leave, fine

@@ -276,6 +276,27 @@ export async function disconnectXero(): Promise<{ error?: string }> {
   }
 }
 
+export async function disconnectSalesforce(): Promise<{ error?: string }> {
+  try {
+    const { supabase } = await requireUser();
+    const { error } = await supabase
+      .from("salesforce_connections")
+      .update({
+        instance_url: null,
+        refresh_token_encrypted: null,
+        connected_by: null,
+        connected_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", 1);
+    if (error) return { error: error.message };
+    revalidatePath("/settings");
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
 export type ProcessSelectedResult = {
   processed: number;
   suggested: number;
