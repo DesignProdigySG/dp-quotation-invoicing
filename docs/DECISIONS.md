@@ -533,3 +533,39 @@ Fixed by replacing the whole matching tier:
   than exact-number) match.
 - New `unmatched_email_pos` columns: `suggested_invoice_source`,
   `suggested_quotation_id` (both nullable, additive migration).
+
+## Decision 9: Login copy, review-nav counters, and a real signup bug fix
+
+Three small, unrelated requests, triaged and shipped together since none
+needed a dedicated plan-mode round on their own:
+
+- **Login copy**: "Sign in with your DP colleague account." →
+  "Sign up for an account with your DP email address." (`app/login/page.tsx`).
+- **Review nav**: "Needs review" → "Review Quotes"; both review links
+  (`/review`, `/review/purchase-orders`) now show a pending count —
+  `Review Quotes (5)` — via a cheap `{ count: "exact", head: true }` query
+  against `unmatched_email_quotes`/`unmatched_email_pos`
+  (`app/(app)/layout.tsx`), omitted entirely when the count is zero.
+- **Signup confirmation email led to a 404 on the app's own domain,
+  confirmed by the user.** Root cause: `signUp()`
+  (`app/login/actions.ts`) never had a corresponding callback route —
+  only the Gmail and Xero OAuth callbacks existed under `app/api/auth/`.
+  Fixed with the standard Supabase-documented Next.js App Router pattern:
+  new `app/auth/confirm/route.ts` calling `supabase.auth.verifyOtp({ type,
+  token_hash })` from the confirmation link's query params, then redirecting
+  to `/board` on success or back to `/login` with an error otherwise.
+  **A second, easy-to-miss bug found while wiring this in**: the global
+  auth middleware (`lib/supabase/middleware.ts`) redirects any
+  unauthenticated request straight to `/login` unless the path is under
+  `/login` — a brand-new signup clicking the confirmation link from their
+  email is, by definition, not yet authenticated, so without an exemption
+  the new route would never even run; it'd just bounce to `/login` before
+  `verifyOtp` ever fired, silently failing instead of 404ing. Fixed by
+  adding `/auth/confirm` to the middleware's `isAuthRoute` allowlist
+  alongside `/login`.
+  **What I couldn't verify myself**: whether the Supabase project's
+  "Confirm signup" email template actually sends a link in the
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`
+  shape this route expects — there's no MCP tool exposing Auth email
+  template config (same gap as the leaked-password-protection setting
+  earlier this session). Flagged to the user directly rather than assumed.
