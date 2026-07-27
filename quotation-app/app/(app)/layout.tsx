@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../login/actions";
+import FeedbackWidget from "./feedback/FeedbackWidget";
+
+const FEEDBACK_OWNER_EMAIL = "yuanwen@dp.sg";
 
 export default async function AppLayout({
   children,
@@ -38,6 +41,7 @@ export default async function AppLayout({
           <Link href="/review/purchase-orders">
             Review POs{poReviewCount ? ` (${poReviewCount})` : ""}
           </Link>
+          {user?.email === FEEDBACK_OWNER_EMAIL && <Link href="/feedback">Feedback</Link>}
           <Link href="/settings">Settings</Link>
         </nav>
         <div className="right">
@@ -50,6 +54,7 @@ export default async function AppLayout({
         </div>
       </div>
       <div className="container">{children}</div>
+      <FeedbackWidget />
     </>
   );
 }

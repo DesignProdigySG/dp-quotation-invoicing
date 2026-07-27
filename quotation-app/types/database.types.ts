@@ -103,6 +103,36 @@ export type Database = {
         }
         Relationships: []
       }
+      feedback: {
+        Row: {
+          created_at: string
+          id: string
+          image_paths: string[]
+          message: string
+          owner_id: string
+          page_path: string | null
+          submitted_by_email: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_paths?: string[]
+          message: string
+          owner_id: string
+          page_path?: string | null
+          submitted_by_email: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_paths?: string[]
+          message?: string
+          owner_id?: string
+          page_path?: string | null
+          submitted_by_email?: string
+        }
+        Relationships: []
+      }
       gmail_connections: {
         Row: {
           created_at: string
