@@ -284,11 +284,14 @@ export type CheckXeroStatusResult = {
 // larger candidate list so a big `iDs` filter can't hit a request-size limit.
 const XERO_GET_INVOICES_CHUNK_SIZE = 100;
 
-// Bulk counterpart to refreshInvoiceFromXero: checks every not-yet-Paid
-// pushed invoice against Xero in as few API calls as possible (Xero's
-// getInvoices supports fetching many specific invoices by ID in one call,
-// unlike getInvoice which only takes one). Each row's update is independent,
-// so a Xero error partway through still leaves the successfully-checked rows
+// Bulk counterpart to refreshInvoiceFromXero: checks every pushed invoice
+// against Xero in as few API calls as possible (Xero's getInvoices supports
+// fetching many specific invoices by ID in one call, unlike getInvoice which
+// only takes one). Not just "not-yet-Paid" ones — a Paid invoice can still
+// get voided in Xero afterward (e.g. a reversed payment), and that should be
+// caught too, not just picked up if someone happens to click "Refresh from
+// Xero" on that specific invoice. Each row's update is independent, so a
+// Xero error partway through still leaves the successfully-checked rows
 // correctly updated — the partial counts are returned alongside the error
 // rather than treated as a failed transaction.
 export async function checkInvoicesAgainstXero(): Promise<CheckXeroStatusResult> {
@@ -297,7 +300,6 @@ export async function checkInvoicesAgainstXero(): Promise<CheckXeroStatusResult>
   const { data: candidates, error: fetchError } = await supabase
     .from("invoices")
     .select("id, status, invoice_number, xero_invoice_id")
-    .in("status", ["Draft", "Sent"])
     .not("xero_invoice_id", "is", null);
 
   if (fetchError) {
