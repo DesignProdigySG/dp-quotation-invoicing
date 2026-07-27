@@ -326,6 +326,13 @@ textarea:focus {
   overflow-y: auto;
 }
 
+.feedback-trigger {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 90;
+}
+
 .login-wrap {
   min-height: 100vh;
   display: flex;

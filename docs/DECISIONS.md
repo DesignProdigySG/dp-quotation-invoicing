@@ -569,3 +569,50 @@ needed a dedicated plan-mode round on their own:
   shape this route expects — there's no MCP tool exposing Auth email
   template config (same gap as the leaked-password-protection setting
   earlier this session). Flagged to the user directly rather than assumed.
+
+## Decision 10: Feedback widget (text + images, screen recording deferred)
+
+User wanted a persistent feedback affordance so colleagues can flag issues/
+ideas as they hit them. Scoped down from the original ask (text + images +
+short screen-recording video) — screen recording needs browser
+screen-capture permissions, client-side video recording, and direct-to-
+storage uploads to dodge Vercel's request size limits, a meaningfully
+bigger lift than the rest; deferred as a stretch goal, not built.
+
+- **Visibility is asymmetric and deliberately not the `xero_connections`
+  pattern.** Anyone signed in can *submit* feedback, but only
+  `yuanwen@dp.sg` — confirmed directly via `AskUserQuestion` to be the
+  actual login email for this app, not assumed from the general contact
+  email in this session's context — can *read* the list. Feedback content
+  is more likely to be sensitive than shared company resources like Xero
+  settings, so this intentionally breaks from the "no role system, single
+  trust level" default used everywhere else in this app. Enforced twice:
+  RLS (`auth.email() = 'yuanwen@dp.sg'` on both the `feedback` table's
+  SELECT policy and the `feedback-images` storage bucket's SELECT policy)
+  and a page-level `redirect("/board")` for defense in depth, plus the
+  "Feedback" nav link itself only renders for that email so no one else is
+  even pointed at a page they can't use.
+- **Image upload mirrors `uploadSignature`** (`app/(app)/settings/actions.ts`)
+  exactly in shape — private Storage bucket, path-prefixed by
+  `auth.uid()`, type/size validation before upload — just with a higher
+  per-file cap (5MB vs signatures' 2MB, since screenshots run bigger) and a
+  6-image-per-submission limit.
+- **Submitter info is denormalized onto the row** (`submitted_by_email`)
+  rather than joined from `auth.users`, mirroring
+  `unmatched_email_quotes`/`unmatched_email_pos` — `auth.users` isn't
+  queryable from the normal client anyway.
+- **No new modal CSS** — reuses the existing `.modal-overlay`/
+  `.modal-content` classes already defined in `app/globals.css` for
+  `CheckNowModal.tsx`. Only new CSS is `.feedback-trigger` (the fixed
+  bottom-right button, `z-index: 90`, one below the modal's `z-index: 100`
+  so an open modal always wins).
+- **No resolve/dismiss/status workflow in v1** — pure read list for the
+  owner. Deliberately not built until real feedback starts coming in and
+  it's clear whether a triage workflow is actually needed.
+- **Considered and explicitly deferred**: an email notification to the
+  owner whenever new feedback arrives. Two options were discussed —
+  Resend (new account/API key, but doesn't touch the existing Gmail
+  connection) vs. reusing the connected Gmail account (no new service, but
+  needs an added `gmail.send` OAuth scope and a one-time reconnect since
+  existing refresh tokens can't retroactively gain new scopes) — user
+  decided not to add either for now.
