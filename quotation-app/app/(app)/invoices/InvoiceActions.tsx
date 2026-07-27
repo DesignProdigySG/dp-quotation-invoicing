@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { setInvoiceStatus, deleteInvoice, pushInvoiceToXero, refreshInvoiceFromXero } from "./actions";
+import {
+  setInvoiceStatus,
+  deleteInvoice,
+  pushInvoiceToXero,
+  refreshInvoiceFromXero,
+  uploadExternalQuoteFile,
+} from "./actions";
 import { xeroStatusLabel } from "@/lib/xero/statusLabel";
 import { useFormDirty } from "@/lib/forms/FormDirtyContext";
 
@@ -13,6 +19,9 @@ export default function InvoiceActions({
   xeroStatus,
   xeroPushedAt,
   xeroPushError,
+  externalQuoteStatus,
+  externalQuoteNumber,
+  externalQuoteFileUrl,
 }: {
   invoiceId: string;
   status: string;
@@ -20,12 +29,38 @@ export default function InvoiceActions({
   xeroStatus: string | null;
   xeroPushedAt: string | null;
   xeroPushError: string | null;
+  externalQuoteStatus: string | null;
+  externalQuoteNumber: string | null;
+  externalQuoteFileUrl: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(xeroPushError);
   const [showDirtyConfirm, setShowDirtyConfirm] = useState(false);
+  const [quoteFile, setQuoteFile] = useState<File | null>(null);
+  const [uploadingQuoteFile, setUploadingQuoteFile] = useState(false);
   const { isDirty } = useFormDirty();
+
+  async function attachQuoteFile() {
+    if (!quoteFile) return;
+    setUploadingQuoteFile(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.set("file", quoteFile);
+      const result = await uploadExternalQuoteFile(invoiceId, formData);
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setQuoteFile(null);
+        router.refresh();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setUploadingQuoteFile(false);
+    }
+  }
 
   async function markSent() {
     setBusy(true);
@@ -146,6 +181,45 @@ export default function InvoiceActions({
           </span>
           ) on {xeroPushedAt ? new Date(xeroPushedAt).toLocaleDateString() : "—"}. This is
           independent of this app's own status above — mark it paid in Xero separately.
+        </p>
+      )}
+
+      {externalQuoteStatus === "has_external_quote" && (
+        <div style={{ marginTop: 8 }}>
+          <p className="subtitle">
+            A quotation was generated outside the app for this invoice
+            {externalQuoteNumber ? ` (${externalQuoteNumber})` : ""}.
+            {externalQuoteFileUrl && (
+              <>
+                {" "}
+                <a href={externalQuoteFileUrl} target="_blank" rel="noreferrer">
+                  View file
+                </a>
+              </>
+            )}
+          </p>
+          {!externalQuoteFileUrl && (
+            <div className="row">
+              <input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => setQuoteFile(e.target.files?.[0] || null)}
+              />
+              <button
+                className="btn btn-sm"
+                type="button"
+                disabled={!quoteFile || uploadingQuoteFile}
+                onClick={attachQuoteFile}
+              >
+                {uploadingQuoteFile ? "Uploading..." : "Attach quotation file"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {externalQuoteStatus === "no_quote" && (
+        <p className="subtitle" style={{ marginTop: 8 }}>
+          No quotation was generated for this invoice.
         </p>
       )}
 

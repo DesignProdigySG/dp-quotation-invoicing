@@ -680,3 +680,55 @@ not what's currently typed.
   proceed knowing what will be sent — was judged the better tradeoff.
 - **`app/(app)/invoices/[id]/page.tsx`** wraps both `InvoiceActions` and
   `InvoiceForm` in `<FormDirtyProvider>`.
+
+## Decision 13: Direct invoice creation, gated by an external-quotation check
+
+Until now every invoice came from converting an in-app quotation
+(`convertQuotationToInvoice`) — checked directly, there was no
+`app/(app)/invoices/new/` route and `InvoiceForm.tsx` was edit-only (no
+client selector at all, since a conversion always inherited one). The user
+wanted a direct "New invoice" path for invoices that don't have an in-app
+quotation behind them, but wanted the app to record what actually happened
+on the quoting side rather than leave a silent gap.
+
+- **`InvoiceForm.tsx` extended to dual create/edit mode**, mirroring
+  `QuoteForm.tsx`'s existing pattern exactly (`invoiceId` now optional). New
+  `clients` prop (rendered only when creating) and `externalQuoteStatus`
+  prop. `currency`/`gstRate`/`gstApplicable` — previously always
+  disabled-display props in this form — became local state so they can
+  react to the create-mode client picker (`handleClientChange`, mirroring
+  `QuoteForm`'s) while staying disabled/unchanged in edit mode, so the
+  existing edit behavior is untouched.
+- **New "+ New invoice" flow**: `NewInvoiceButton.tsx` opens a small modal
+  first — "Was a quotation for this invoice generated outside the app?" —
+  before navigating to `/invoices/new?externalQuote=yes|no`. Kept as a
+  single quick question; the follow-up quote number/file fields live on the
+  actual form for "yes," not stacked into the modal.
+- **New `invoices` columns**: `external_quote_status` (CHECK-constrained to
+  `'has_external_quote' | 'no_quote'`), `external_quote_number`,
+  `external_quote_file_path` — all null for conversions (`quotation_id`
+  being set already tells that story), only populated for directly-created
+  invoices.
+- **New private Storage bucket `external-quotes`**, owner-scoped RLS
+  mirroring the `signatures` bucket's exact shape — checked `invoices`' own
+  RLS directly first (`owner_id = auth.uid()` on all four policies) to
+  confirm owner-only visibility was the right call here, not the more open
+  `feedback-images` pattern (which exists for a different reason — a single
+  reviewer needing to see everyone's submissions).
+- **`createInvoice`** mirrors `convertQuotationToInvoice`'s insert shape
+  exactly but leaves `quotation_id` null and takes `due_date` directly from
+  the form instead of inheriting it (a from-scratch invoice has no source
+  quote to inherit one from). **`uploadExternalQuoteFile`** mirrors
+  `uploadSignature` exactly (type/size validation, private per-owner
+  path), just with a broader allowed-type list (adds PDF) and a larger cap
+  (10MB vs signatures' 2MB, since scanned quote documents run bigger).
+- **A failed/skipped file upload is never a dead end**: if the invoice
+  saves but the file upload fails, the invoice is still created (the quote
+  number is already saved) and the detail page grows a small inline
+  "Attach quotation file" control wired to the same `uploadExternalQuoteFile`
+  action, rather than forcing the whole submission to be redone.
+- **Shipped on its own fresh branch, not the parked Salesforce branch** —
+  explicitly confirmed with the user first, since bundling it into the same
+  branch as the unmerged, deliberately-preview-only Salesforce work
+  (Decision 13 on that branch — a numbering clash to resolve whenever both
+  merge) would have tied this feature's shippability to Salesforce's.
