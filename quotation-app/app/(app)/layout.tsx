@@ -12,6 +12,17 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
+  const [{ count: quoteReviewCount }, { count: poReviewCount }] = await Promise.all([
+    supabase
+      .from("unmatched_email_quotes")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+    supabase
+      .from("unmatched_email_pos")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+  ]);
+
   return (
     <>
       <div className="topnav">
@@ -21,8 +32,12 @@ export default async function AppLayout({
           <Link href="/clients">Clients</Link>
           <Link href="/quotes">Quotes</Link>
           <Link href="/invoices">Invoices</Link>
-          <Link href="/review">Needs review</Link>
-          <Link href="/review/purchase-orders">Review POs</Link>
+          <Link href="/review">
+            Review Quotes{quoteReviewCount ? ` (${quoteReviewCount})` : ""}
+          </Link>
+          <Link href="/review/purchase-orders">
+            Review POs{poReviewCount ? ` (${poReviewCount})` : ""}
+          </Link>
           <Link href="/settings">Settings</Link>
         </nav>
         <div className="right">

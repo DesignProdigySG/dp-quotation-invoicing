@@ -11,7 +11,7 @@ export default async function LoginPage({
     <div className="login-wrap">
       <div className="card login-card">
         <h1>Quotations &amp; Invoices</h1>
-        <p className="subtitle">Sign in with your DP colleague account.</p>
+        <p className="subtitle">Sign up for an account with your DP email address.</p>
 
         {params.error && <div className="error">{params.error}</div>}
         {params.message && (
