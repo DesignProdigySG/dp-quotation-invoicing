@@ -644,3 +644,39 @@ being pulled and shown, once refreshed. Two real gaps found and fixed:
   doesn't map to anything in `nextAppStatus` — it's not a state the app's
   own Draft→Sent→Paid workflow understands, so this stays a display-only
   fix to the existing `xero_status` sync, not a new state machine.
+
+## Decision 12: Unsaved-changes guard before pushing to Xero
+
+First of three "big-ish" asks scoped together (Salesforce quote numbers,
+this, and a Gmail AI assistant — see the scoping conversation; Salesforce
+deferred, this one picked to build first as the smallest, Gmail assistant
+still exploration-only). The invoice edit form (`InvoiceForm.tsx`) and the
+"Push to Xero" button (`InvoiceActions.tsx`) are independent sibling client
+components on the same page with no existing connection — confirmed by
+reading both directly rather than assumed. Pushing while the form has
+unsaved edits would silently push whatever's last-saved in the database,
+not what's currently typed.
+
+- **`lib/forms/FormDirtyContext.tsx` (new)**: a small shared React context
+  (`FormDirtyProvider`/`useFormDirty`) — deliberately placed under `lib/`
+  rather than nested inside `app/(app)/invoices/`, since the same pattern
+  is meant to extend to quotes once a Salesforce push exists there too, per
+  the scoping conversation.
+- **`InvoiceForm.tsx`** marks the form dirty via a single `useEffect`
+  watching all of the form's field state (skipping the very first render
+  with a ref, so mounting doesn't immediately flag it dirty) rather than
+  touching every individual `onChange` handler — smaller diff, same result.
+  Clears dirty on a successful save.
+- **`InvoiceActions.tsx`** intercepts the push button when dirty and shows
+  a confirmation modal (reusing the existing `.modal-overlay`/
+  `.modal-content` CSS) with **"Cancel" / "Push anyway"** — simplified from
+  the scoping doc's three-option sketch ("Save and push" / "Push without
+  saving" / "Cancel"). A combined "Save and push" button would need
+  `InvoiceActions` to programmatically trigger `InvoiceForm`'s save function
+  across the sibling-component boundary (a registered-callback pattern) —
+  real added complexity for a "SMALL"-scoped feature, and arguably less
+  honest anyway (what happens if the triggered save fails silently before
+  the push proceeds?). Two clear buttons — go back and save yourself, or
+  proceed knowing what will be sent — was judged the better tradeoff.
+- **`app/(app)/invoices/[id]/page.tsx`** wraps both `InvoiceActions` and
+  `InvoiceForm` in `<FormDirtyProvider>`.

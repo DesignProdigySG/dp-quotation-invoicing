@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import InvoiceForm from "../InvoiceForm";
 import InvoiceActions from "../InvoiceActions";
+import { FormDirtyProvider } from "@/lib/forms/FormDirtyContext";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status.toLowerCase()}`}>{status}</span>;
@@ -51,35 +52,37 @@ export default async function InvoiceDetailPage({
         </div>
       </div>
 
-      <div className="card">
-        <InvoiceActions
-          invoiceId={invoice.id}
-          status={invoice.status}
-          xeroInvoiceId={invoice.xero_invoice_id}
-          xeroStatus={invoice.xero_status}
-          xeroPushedAt={invoice.xero_pushed_at}
-          xeroPushError={invoice.xero_push_error}
-        />
-      </div>
+      <FormDirtyProvider>
+        <div className="card">
+          <InvoiceActions
+            invoiceId={invoice.id}
+            status={invoice.status}
+            xeroInvoiceId={invoice.xero_invoice_id}
+            xeroStatus={invoice.xero_status}
+            xeroPushedAt={invoice.xero_pushed_at}
+            xeroPushError={invoice.xero_push_error}
+          />
+        </div>
 
-      <InvoiceForm
-        invoiceId={invoice.id}
-        currency={invoice.currency}
-        gstRate={invoice.gst_rate}
-        gstApplicable={invoice.gst_applicable}
-        clientDefaultBillingAddress={(invoice as any).clients?.billing_address ?? null}
-        billingAddresses={billingAddresses || []}
-        initial={{
-          due_date: invoice.due_date,
-          reference: invoice.reference,
-          exchange_rate: invoice.exchange_rate,
-          display_currency: invoice.display_currency as "original" | "sgd",
-          billing_address_id: invoice.billing_address_id,
-          billing_address: invoice.billing_address,
-          notes: invoice.notes || "",
-          line_items: lineItems,
-        }}
-      />
+        <InvoiceForm
+          invoiceId={invoice.id}
+          currency={invoice.currency}
+          gstRate={invoice.gst_rate}
+          gstApplicable={invoice.gst_applicable}
+          clientDefaultBillingAddress={(invoice as any).clients?.billing_address ?? null}
+          billingAddresses={billingAddresses || []}
+          initial={{
+            due_date: invoice.due_date,
+            reference: invoice.reference,
+            exchange_rate: invoice.exchange_rate,
+            display_currency: invoice.display_currency as "original" | "sgd",
+            billing_address_id: invoice.billing_address_id,
+            billing_address: invoice.billing_address,
+            notes: invoice.notes || "",
+            line_items: lineItems,
+          }}
+        />
+      </FormDirtyProvider>
     </>
   );
 }
