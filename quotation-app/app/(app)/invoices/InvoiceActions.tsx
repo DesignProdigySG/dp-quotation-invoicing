@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { setInvoiceStatus, deleteInvoice, pushInvoiceToXero, refreshInvoiceFromXero } from "./actions";
 import { xeroStatusLabel } from "@/lib/xero/statusLabel";
+import { useFormDirty } from "@/lib/forms/FormDirtyContext";
 
 export default function InvoiceActions({
   invoiceId,
@@ -23,6 +24,8 @@ export default function InvoiceActions({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(xeroPushError);
+  const [showDirtyConfirm, setShowDirtyConfirm] = useState(false);
+  const { isDirty } = useFormDirty();
 
   async function markSent() {
     setBusy(true);
@@ -51,6 +54,15 @@ export default function InvoiceActions({
   }
 
   async function pushToXero() {
+    if (isDirty) {
+      setShowDirtyConfirm(true);
+      return;
+    }
+    await doPushToXero();
+  }
+
+  async function doPushToXero() {
+    setShowDirtyConfirm(false);
     setBusy(true);
     setError(null);
     try {
@@ -135,6 +147,29 @@ export default function InvoiceActions({
           ) on {xeroPushedAt ? new Date(xeroPushedAt).toLocaleDateString() : "—"}. This is
           independent of this app's own status above — mark it paid in Xero separately.
         </p>
+      )}
+
+      {showDirtyConfirm && (
+        <div className="modal-overlay">
+          <div className="modal-content card">
+            <div className="page-header">
+              <h2>Unsaved changes</h2>
+            </div>
+            <p>
+              This invoice has unsaved changes in the form below that won&apos;t be reflected in
+              Xero. Save your changes first if you want them included, or push anyway to send
+              what's currently saved.
+            </p>
+            <div className="actions" style={{ marginTop: 18 }}>
+              <button className="btn" type="button" onClick={() => setShowDirtyConfirm(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" type="button" onClick={doPushToXero}>
+                Push anyway
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

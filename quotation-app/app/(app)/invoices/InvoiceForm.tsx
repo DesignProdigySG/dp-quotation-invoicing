@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateInvoice } from "./actions";
 import { formatMoney, computeTotals } from "@/lib/format";
 import type { LineItemInput } from "../quotes/actions";
+import { useFormDirty } from "@/lib/forms/FormDirtyContext";
 
 type BillingAddressOption = { id: string; label: string; address: string };
 
@@ -58,6 +59,26 @@ export default function InvoiceForm({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { setDirty } = useFormDirty();
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setDirty(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dueDate,
+    reference,
+    exchangeRate,
+    displayCurrency,
+    billingAddressSelection,
+    billingAddressText,
+    notes,
+    lineItems,
+  ]);
 
   function updateLine(idx: number, patch: Partial<LineItemInput>) {
     setLineItems((items) => items.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
@@ -113,6 +134,7 @@ export default function InvoiceForm({
         notes,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       });
+      setDirty(false);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
