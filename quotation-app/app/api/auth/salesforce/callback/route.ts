@@ -35,9 +35,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const codeVerifier = request.cookies.get("salesforce_oauth_verifier")?.value;
+  if (!codeVerifier) {
+    return NextResponse.redirect(
+      new URL("/settings?salesforce_error=missing_verifier", request.url)
+    );
+  }
+
   let oauth2;
   try {
-    oauth2 = getSalesforceOAuth2();
+    oauth2 = getSalesforceOAuth2({ pkce: true });
+    // getSalesforceOAuth2({ pkce: true }) builds a fresh instance with its
+    // own random PKCE verifier — overwrite it with the one actually used to
+    // build the authorization URL the user was redirected to, carried via
+    // cookie.
+    oauth2.codeVerifier = codeVerifier;
   } catch (e) {
     return NextResponse.redirect(
       new URL(
@@ -112,5 +124,6 @@ export async function GET(request: NextRequest) {
     new URL("/settings?salesforce_connected=1", request.url)
   );
   response.cookies.delete("salesforce_oauth_state");
+  response.cookies.delete("salesforce_oauth_verifier");
   return response;
 }

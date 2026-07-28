@@ -16,7 +16,7 @@ export async function GET() {
 
   let url: string;
   try {
-    const oauth2 = getSalesforceOAuth2();
+    const oauth2 = getSalesforceOAuth2({ pkce: true });
     const state = randomBytes(16).toString("hex");
     url = oauth2.getAuthorizationUrl({ scope: SALESFORCE_SCOPES, state });
 
@@ -28,6 +28,19 @@ export async function GET() {
       maxAge: 600,
       path: "/",
     });
+    // Salesforce's External Client App OAuth policy requires PKCE. The
+    // verifier used to build `url`'s code_challenge has to survive to the
+    // callback route (a separate invocation) to be sent back as
+    // code_verifier during the token exchange.
+    if (oauth2.codeVerifier) {
+      response.cookies.set("salesforce_oauth_verifier", oauth2.codeVerifier, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        maxAge: 600,
+        path: "/",
+      });
+    }
     return response;
   } catch (e) {
     return NextResponse.json(
