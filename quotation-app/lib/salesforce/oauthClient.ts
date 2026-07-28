@@ -2,10 +2,13 @@ import { OAuth2 } from "jsforce";
 
 // "refresh_token" and "offline_access" are a single combined scope in
 // Salesforce's picklist ("refresh_token, offline_access"); "api" grants
-// REST API access; "id" lets the callback look up the connected org/user
-// during token exchange, mirroring what the Gmail/Xero callbacks already
-// do with their own profile-lookup calls.
-export const SALESFORCE_SCOPES = "api refresh_token id";
+// REST API access. Deliberately NOT requesting "id"/"openid" — the callback
+// only reads tokenResponse.refresh_token/instance_url, both present on the
+// base token response regardless of that scope, and requesting it added a
+// real failure mode: it's a separate enableable scope from "openid" in
+// Salesforce's app config, so requesting the wrong one of the two produces
+// invalid_scope at the authorization step.
+export const SALESFORCE_SCOPES = "api refresh_token";
 
 export function getSalesforceOAuth2(opts: { pkce?: boolean } = {}) {
   const clientId = process.env.SALESFORCE_CLIENT_ID;
