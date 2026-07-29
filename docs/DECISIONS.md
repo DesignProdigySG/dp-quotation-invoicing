@@ -818,3 +818,47 @@ Mechanically:
   one detail most likely to need adjusting from a real Salesforce error,
   the same debugging pattern that resolved every Phase A surprise) before
   merging.
+
+## Decision 15: Fix "same bubble" Opportunity validation error on Salesforce push
+
+First real push attempt against the live org failed with a custom validation
+rule: "Opportunity Owner and Opportunity Referrer cannot be from the same
+bubble!" — Phase B's push never set either field, so Salesforce defaulted
+both from the connected integration user's own record and they collided.
+
+The user's proposed fix, confirmed directly: a **per-user** "DP Bubble"
+setting (different staff belong to different bubbles and any of them might
+push a quote — not a shared app-wide value like the Xero/Salesforce
+connections), written into the Opportunity's **"Opportunity Owner (Custom)"**
+field at push time, plus setting **"Cross-sell Opportunity"** to No/false.
+"Opportunity Referrer" itself is left untouched — its existing default is
+fine, the fix is just making sure Owner doesn't collide with it.
+
+- **Both custom fields are resolved dynamically via Salesforce's `describe()`
+  API, matched by their visible label, rather than hardcoded API names** —
+  `lib/salesforce/opportunityFields.ts`'s `findOpportunityFieldByLabel(conn, label)`.
+  Same reasoning as every other org-specific Salesforce detail this project
+  has handled (Decision 5's live tax settings, Decision 13/14's live-error
+  field discovery): custom field API names are unpredictable, and this avoids
+  needing the user to manually look them up in Setup at all. It also means
+  the Settings dropdown populates itself from Salesforce's actual live
+  picklist values instead of a hand-typed list.
+- **`profiles.dp_bubble` (new column)** — added to `ProfileForm.tsx`
+  alongside the existing `full_name`/`title` fields, following the same
+  per-user pattern (`saveProfile`'s upsert, owner-scoped RLS already in place
+  on `profiles`). A new `getDpBubbleOptions()` action fetches the live
+  picklist values for display; the form degrades gracefully (shows the error,
+  keeps whatever's already saved) if Salesforce is unreachable, since this
+  page isn't fundamentally about Salesforce.
+- **`pushQuotationToSalesforce` now calls `supabase.auth.getUser()`** (it
+  didn't before) to use the **acting/pushing user's** bubble, not the
+  quotation's original `owner_id` — "Opportunity Owner" should reflect
+  whoever is actually doing the push. Fails fast with a clear message
+  ("Set your DP Bubble in Settings...") before even attempting the
+  Salesforce connection if the pushing user hasn't set one.
+- **Cross-sell Opportunity's "No" value is type-aware**: if the field
+  describes as `boolean`, sets `false` directly; if it's a picklist, finds
+  the entry whose label matches "no" case-insensitively and uses its value.
+  Avoids assuming the field's shape.
+- Still on the same unmerged branch/preview deployment as the rest of the
+  Salesforce work — not merged to `main`.
