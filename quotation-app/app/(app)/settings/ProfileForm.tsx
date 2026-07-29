@@ -1,14 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveProfile, uploadSignature, removeSignature } from "./actions";
+import { saveProfile, uploadSignature, removeSignature, getDpBubbleOptions } from "./actions";
 
 export default function ProfileForm({
   initial,
   signatureUrl,
 }: {
-  initial: { full_name: string | null; title: string | null } | null;
+  initial: { full_name: string | null; title: string | null; dp_bubble: string | null } | null;
   signatureUrl: string | null;
 }) {
   const router = useRouter();
@@ -16,12 +16,25 @@ export default function ProfileForm({
   const [form, setForm] = useState({
     full_name: initial?.full_name || "",
     title: initial?.title || "",
+    dp_bubble: initial?.dp_bubble || "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
   const [signatureError, setSignatureError] = useState<string | null>(null);
+  const [bubbleOptions, setBubbleOptions] = useState<{ value: string; label: string }[]>([]);
+  const [bubbleError, setBubbleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getDpBubbleOptions().then((result) => {
+      if (result.error) {
+        setBubbleError(result.error);
+      } else {
+        setBubbleOptions(result.options);
+      }
+    });
+  }, []);
 
   async function handleSave() {
     setSaving(true);
@@ -108,6 +121,25 @@ export default function ProfileForm({
       </div>
       <p className="subtitle">
         Shown as a &quot;Prepared by&quot; line on quotation and invoice PDFs.
+      </p>
+
+      <label htmlFor="dp_bubble">DP Bubble</label>
+      {bubbleError && <div className="error">{bubbleError}</div>}
+      <select
+        id="dp_bubble"
+        value={form.dp_bubble}
+        disabled={!bubbleError && bubbleOptions.length === 0}
+        onChange={(e) => setForm({ ...form, dp_bubble: e.target.value })}
+      >
+        <option value="">Not set</option>
+        {bubbleOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <p className="subtitle">
+        Used as the Opportunity Owner when you push a quotation to Salesforce.
       </p>
 
       <div className="actions">

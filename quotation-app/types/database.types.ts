@@ -331,6 +331,7 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          dp_bubble: string | null
           full_name: string | null
           owner_id: string
           signature_path: string | null
@@ -339,6 +340,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dp_bubble?: string | null
           full_name?: string | null
           owner_id: string
           signature_path?: string | null
@@ -347,6 +349,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dp_bubble?: string | null
           full_name?: string | null
           owner_id?: string
           signature_path?: string | null

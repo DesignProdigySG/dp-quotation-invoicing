@@ -39,7 +39,7 @@ export default async function SettingsPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, title, signature_path")
+    .select("full_name, title, signature_path, dp_bubble")
     .eq("owner_id", user.id)
     .maybeSingle();
 

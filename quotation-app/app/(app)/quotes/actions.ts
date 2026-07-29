@@ -6,6 +6,7 @@ import { addDaysToDateString } from "@/lib/format";
 import { BRAND } from "@/lib/pdf/brand";
 import { getSalesforceClientForConnection } from "@/lib/salesforce/client";
 import { findOrCreateSalesforceAccount } from "@/lib/salesforce/accounts";
+import { findOpportunityFieldByLabel } from "@/lib/salesforce/opportunityFields";
 
 export type LineItemInput = {
   description: string;
@@ -224,10 +225,18 @@ export async function convertQuotationToInvoice(quotationId: string) {
 // left open; it only flips to Closed Won later via
 // syncOpportunityStageForInvoice, once a PO is matched AND the invoice is
 // sent (see lib/salesforce/opportunityStage.ts).
+const OPPORTUNITY_OWNER_FIELD_LABEL = "Opportunity Owner (Custom)";
+const CROSS_SELL_FIELD_LABEL = "Cross-sell Opportunity";
+
 export async function pushQuotationToSalesforce(
   quotationId: string
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not signed in" };
 
   const { data: quotation, error: fetchError } = await supabase
     .from("quotations")
@@ -262,10 +271,48 @@ export async function pushQuotationToSalesforce(
     return { error: message };
   }
 
+  const { data: pusherProfile } = await supabase
+    .from("profiles")
+    .select("dp_bubble")
+    .eq("owner_id", user.id)
+    .maybeSingle();
+  if (!pusherProfile?.dp_bubble) {
+    return await recordFailure("Set your DP Bubble in Settings before pushing to Salesforce");
+  }
+  const dpBubble = pusherProfile.dp_bubble;
+
   try {
     const { conn } = await getSalesforceClientForConnection();
 
     const accountId = await findOrCreateSalesforceAccount(conn, client);
+
+    const ownerField = await findOpportunityFieldByLabel(conn, OPPORTUNITY_OWNER_FIELD_LABEL);
+    if (!ownerField) {
+      return await recordFailure(
+        `Could not find the "${OPPORTUNITY_OWNER_FIELD_LABEL}" field in Salesforce`
+      );
+    }
+
+    const crossSellField = await findOpportunityFieldByLabel(conn, CROSS_SELL_FIELD_LABEL);
+    if (!crossSellField) {
+      return await recordFailure(
+        `Could not find the "${CROSS_SELL_FIELD_LABEL}" field in Salesforce`
+      );
+    }
+    let crossSellNoValue: string | boolean;
+    if (crossSellField.type === "boolean") {
+      crossSellNoValue = false;
+    } else {
+      const noOption = crossSellField.picklistValues.find(
+        (pv) => pv.label.trim().toLowerCase() === "no"
+      );
+      if (!noOption) {
+        return await recordFailure(
+          `Could not determine the "No" value for "${CROSS_SELL_FIELD_LABEL}"`
+        );
+      }
+      crossSellNoValue = noOption.value;
+    }
 
     const opportunity = await conn.sobject("Opportunity").create({
       Name: `${client.name} - Quotation`,
@@ -277,6 +324,8 @@ export async function pushQuotationToSalesforce(
       StageName: "Proposal/Price Quote",
       CloseDate: quotation.valid_until ?? quotation.quote_date,
       Amount: amount,
+      [ownerField.name]: dpBubble,
+      [crossSellField.name]: crossSellNoValue,
     });
     if (!opportunity.success) {
       return await recordFailure(
