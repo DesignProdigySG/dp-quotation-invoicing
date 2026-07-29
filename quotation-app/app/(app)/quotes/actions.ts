@@ -184,7 +184,15 @@ export async function deleteQuotation(id: string): Promise<{ error?: string }> {
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      const alreadyGone = SALESFORCE_ALREADY_DELETED_CODES.some((code) => message.includes(code));
+      // jsforce/Salesforce errors thrown this way (as opposed to a SaveResult
+      // with a structured errorCode) carry a lowercase, space-separated
+      // human message like "entity is deleted" rather than the
+      // ENTITY_IS_DELETED-style code — confirmed directly from a real
+      // failure, not guessed. Normalize both sides before comparing.
+      const normalizedMessage = message.toLowerCase();
+      const alreadyGone = SALESFORCE_ALREADY_DELETED_CODES.some((code) =>
+        normalizedMessage.includes(code.toLowerCase().replace(/_/g, " "))
+      );
       if (!alreadyGone) {
         return { error: `Failed to delete linked Salesforce Opportunity: ${message}` };
       }
