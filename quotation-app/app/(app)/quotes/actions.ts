@@ -199,6 +199,21 @@ export async function deleteQuotation(id: string): Promise<{ error?: string }> {
     }
   }
 
+  // Two FKs into quotations default to NO ACTION rather than SET NULL like
+  // invoices.quotation_id already does (confirmed directly against the live
+  // schema), so they'd otherwise block this delete outright. Null them out
+  // rather than deleting those rows — preserves the historical email-intake
+  // record (status/resolved_at stay intact), just detaches the now-deleted
+  // quotation reference.
+  await supabase
+    .from("unmatched_email_quotes")
+    .update({ resolved_quotation_id: null })
+    .eq("resolved_quotation_id", id);
+  await supabase
+    .from("unmatched_email_pos")
+    .update({ suggested_quotation_id: null })
+    .eq("suggested_quotation_id", id);
+
   const { error } = await supabase.from("quotations").delete().eq("id", id);
   if (error) return { error: error.message };
 
