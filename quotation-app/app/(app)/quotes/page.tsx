@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney, computeTotals } from "@/lib/format";
+import { getSalesforceInstanceUrl } from "@/lib/salesforce/instanceUrl";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status.toLowerCase()}`}>{status}</span>;
@@ -8,10 +9,13 @@ function StatusBadge({ status }: { status: string }) {
 
 export default async function QuotesPage() {
   const supabase = await createClient();
-  const { data: quotations } = await supabase
-    .from("quotations")
-    .select("*, clients(name), quotation_line_items(quantity, unit_price)")
-    .order("created_at", { ascending: false });
+  const [{ data: quotations }, instanceUrl] = await Promise.all([
+    supabase
+      .from("quotations")
+      .select("*, clients(name), quotation_line_items(quantity, unit_price)")
+      .order("created_at", { ascending: false }),
+    getSalesforceInstanceUrl(),
+  ]);
 
   return (
     <>
@@ -42,10 +46,22 @@ export default async function QuotesPage() {
             <tbody>
               {quotations.map((q: any) => {
                 const { total } = computeTotals(q.quotation_line_items || [], q.gst_rate);
+                const salesforceUrl =
+                  instanceUrl && q.salesforce_opportunity_id
+                    ? `${instanceUrl}/${q.salesforce_opportunity_id}`
+                    : null;
                 return (
                   <tr key={q.id}>
                     <td>
                       <Link href={`/quotes/${q.id}`}>{q.quote_number}</Link>
+                      {salesforceUrl && (
+                        <>
+                          {" "}
+                          <a href={salesforceUrl} target="_blank" rel="noreferrer" title="View in Salesforce">
+                            ↗
+                          </a>
+                        </>
+                      )}
                     </td>
                     <td>{q.clients?.name}</td>
                     <td>{q.quote_date}</td>

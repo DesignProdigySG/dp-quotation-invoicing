@@ -42,6 +42,7 @@ export default function QuoteForm({
     billing_address?: string | null;
     notes: string;
     valid_until?: string | null;
+    title?: string | null;
     line_items: LineItemInput[];
   };
 }) {
@@ -72,6 +73,7 @@ export default function QuoteForm({
       "original"
   );
   const [notes, setNotes] = useState(initial?.notes || "");
+  const [title, setTitle] = useState(initial?.title || "");
   const [validUntil, setValidUntil] = useState(initial?.valid_until || "");
   const [billingAddressSelection, setBillingAddressSelection] = useState(
     initial?.billing_address_id ?? (initial?.billing_address ? "__custom__" : "__default__")
@@ -161,6 +163,7 @@ export default function QuoteForm({
         billing_address: billingAddressText || null,
         notes,
         valid_until: validUntil || null,
+        title: title || null,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       };
       if (quoteId) {
@@ -392,6 +395,14 @@ export default function QuoteForm({
           </div>
         )}
       </div>
+
+      <label htmlFor="title">Quotation title (optional)</label>
+      <input
+        id="title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="e.g. Website Redesign — used to name the Salesforce Opportunity"
+      />
 
       <label htmlFor="notes">Notes</label>
       <textarea

@@ -7,6 +7,7 @@ import { BRAND } from "@/lib/pdf/brand";
 import { getSalesforceClientForConnection } from "@/lib/salesforce/client";
 import { findOrCreateSalesforceAccount } from "@/lib/salesforce/accounts";
 import { findOpportunityFieldByLabel } from "@/lib/salesforce/opportunityFields";
+import { generateQuotationTitle } from "@/lib/salesforce/generateQuotationTitle";
 
 export type LineItemInput = {
   description: string;
@@ -26,6 +27,7 @@ export type QuotationInput = {
   billing_address?: string | null;
   notes?: string;
   valid_until?: string | null;
+  title?: string | null;
   line_items: LineItemInput[];
 };
 
@@ -54,6 +56,7 @@ export async function createQuotation(input: QuotationInput) {
       billing_address: input.billing_address ?? null,
       notes: input.notes || null,
       valid_until: validUntil,
+      title: input.title || null,
     })
     .select()
     .single();
@@ -95,6 +98,7 @@ export async function updateQuotation(id: string, input: QuotationInput) {
       billing_address: input.billing_address ?? null,
       notes: input.notes || null,
       valid_until: input.valid_until ?? null,
+      title: input.title || null,
     })
     .eq("id", id);
   if (error) throw new Error(error.message);
@@ -248,6 +252,10 @@ export async function pushQuotationToSalesforce(
     return { error: "Quotation not found" };
   }
 
+  if (quotation.salesforce_quote_id) {
+    return { error: "This quotation has already been pushed to Salesforce" };
+  }
+
   const client = (quotation as any).clients as {
     id: string;
     name: string;
@@ -258,6 +266,7 @@ export async function pushQuotationToSalesforce(
   }
 
   const lineItems = ((quotation as any).quotation_line_items || []) as {
+    description: string;
     quantity: number;
     unit_price: number;
   }[];
@@ -314,8 +323,17 @@ export async function pushQuotationToSalesforce(
       crossSellNoValue = noOption.value;
     }
 
+    // A manually-set title always wins; otherwise fall back to a cheap AI
+    // gist of the line items, persisted below so it's not regenerated (and
+    // is visible/editable afterward) rather than recomputed on every call.
+    const gist = quotation.title || (await generateQuotationTitle(lineItems, quotation.notes));
+
+    const opportunityName = [client.name, gist, new Date(quotation.quote_date).getFullYear()]
+      .filter(Boolean)
+      .join(" - ");
+
     const opportunity = await conn.sobject("Opportunity").create({
-      Name: `${client.name} - Quotation`,
+      Name: opportunityName,
       AccountId: accountId,
       // Left open on purpose — see function comment above. "Proposal/Price
       // Quote" is a standard picklist value; if this org uses a different
@@ -352,6 +370,11 @@ export async function pushQuotationToSalesforce(
         salesforce_opportunity_id: opportunity.id,
         salesforce_pushed_at: new Date().toISOString(),
         salesforce_push_error: null,
+        // Salesforce is the source of truth for the quote number now — this
+        // is what makes every existing display site (quotes list/detail,
+        // the PDF route, the board) show the real number automatically.
+        quote_number: quoteNumber || quotation.quote_number,
+        title: gist,
       })
       .eq("id", quotationId);
     if (updateError) return { error: updateError.message };

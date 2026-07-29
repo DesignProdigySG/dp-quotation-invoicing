@@ -415,6 +415,7 @@ export type Database = {
           salesforce_quote_id: string | null
           salesforce_quote_number: string | null
           status: string
+          title: string | null
           updated_at: string
           valid_until: string | null
         }
@@ -439,6 +440,7 @@ export type Database = {
           salesforce_quote_id?: string | null
           salesforce_quote_number?: string | null
           status?: string
+          title?: string | null
           updated_at?: string
           valid_until?: string | null
         }
@@ -463,6 +465,7 @@ export type Database = {
           salesforce_quote_id?: string | null
           salesforce_quote_number?: string | null
           status?: string
+          title?: string | null
           updated_at?: string
           valid_until?: string | null
         }
