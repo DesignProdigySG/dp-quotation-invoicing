@@ -145,6 +145,24 @@ export async function setQuotationStatus(
 
 export async function deleteQuotation(id: string) {
   const supabase = await createClient();
+
+  const { data: quotation } = await supabase
+    .from("quotations")
+    .select("salesforce_opportunity_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  // Delete the Opportunity only — Quote is its child and gets cascaded
+  // (both land in Salesforce's Recycle Bin together). The Account is
+  // deliberately left alone: it's shared across potentially many
+  // quotations/deals for that client, so this app should never delete it
+  // as a side effect of removing one quotation. If this fails, block the
+  // local delete rather than silently drifting out of sync with Salesforce.
+  if (quotation?.salesforce_opportunity_id) {
+    const { conn } = await getSalesforceClientForConnection();
+    await conn.sobject("Opportunity").destroy(quotation.salesforce_opportunity_id);
+  }
+
   const { error } = await supabase.from("quotations").delete().eq("id", id);
   if (error) throw new Error(error.message);
 
