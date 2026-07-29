@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import QuoteForm from "../QuoteForm";
 import QuoteActions from "../QuoteActions";
+import { getSalesforceInstanceUrl } from "@/lib/salesforce/instanceUrl";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status.toLowerCase()}`}>{status}</span>;
@@ -15,22 +16,29 @@ export default async function QuoteDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: quotation }, { data: clients }, { data: billingAddresses }] = await Promise.all([
-    supabase
-      .from("quotations")
-      .select("*, quotation_line_items(*)")
-      .eq("id", id)
-      .single(),
-    supabase
-      .from("clients")
-      .select(
-        "id, name, default_currency, default_gst_rate, display_currency_preference, billing_address"
-      )
-      .order("name"),
-    supabase.from("client_billing_addresses").select("id, client_id, label, address"),
-  ]);
+  const [{ data: quotation }, { data: clients }, { data: billingAddresses }, instanceUrl] =
+    await Promise.all([
+      supabase
+        .from("quotations")
+        .select("*, quotation_line_items(*)")
+        .eq("id", id)
+        .single(),
+      supabase
+        .from("clients")
+        .select(
+          "id, name, default_currency, default_gst_rate, display_currency_preference, billing_address"
+        )
+        .order("name"),
+      supabase.from("client_billing_addresses").select("id, client_id, label, address"),
+      getSalesforceInstanceUrl(),
+    ]);
 
   if (!quotation) notFound();
+
+  const salesforceUrl =
+    instanceUrl && quotation.salesforce_opportunity_id
+      ? `${instanceUrl}/${quotation.salesforce_opportunity_id}`
+      : null;
 
   const lineItems = ((quotation as any).quotation_line_items || [])
     .sort((a: any, b: any) => a.sort_order - b.sort_order)
@@ -45,7 +53,14 @@ export default async function QuoteDetailPage({
       <div className="page-header">
         <div>
           <h1>
-            {quotation.quote_number} <StatusBadge status={quotation.status} />
+            {salesforceUrl ? (
+              <a href={salesforceUrl} target="_blank" rel="noreferrer">
+                {quotation.quote_number}
+              </a>
+            ) : (
+              quotation.quote_number
+            )}{" "}
+            <StatusBadge status={quotation.status} />
           </h1>
           <p className="subtitle">
             Created {new Date(quotation.created_at).toLocaleDateString()}
@@ -54,7 +69,13 @@ export default async function QuoteDetailPage({
       </div>
 
       <div className="card">
-        <QuoteActions quoteId={quotation.id} status={quotation.status} />
+        <QuoteActions
+          quoteId={quotation.id}
+          status={quotation.status}
+          salesforceQuoteId={quotation.salesforce_quote_id}
+          salesforceQuoteNumber={quotation.salesforce_quote_number}
+          salesforcePushError={quotation.salesforce_push_error}
+        />
       </div>
 
       <QuoteForm
@@ -73,6 +94,7 @@ export default async function QuoteDetailPage({
           billing_address: quotation.billing_address,
           notes: quotation.notes || "",
           valid_until: quotation.valid_until,
+          title: quotation.title,
           line_items: lineItems,
         }}
       />

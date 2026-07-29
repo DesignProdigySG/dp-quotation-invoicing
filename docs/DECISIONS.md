@@ -730,5 +730,230 @@ on the quoting side rather than leave a silent gap.
 - **Shipped on its own fresh branch, not the parked Salesforce branch** —
   explicitly confirmed with the user first, since bundling it into the same
   branch as the unmerged, deliberately-preview-only Salesforce work
-  (Decision 13 on that branch — a numbering clash to resolve whenever both
-  merge) would have tied this feature's shippability to Salesforce's.
+  (numbered Decision 13 on that branch at the time — renumbered to 14 on
+  merge to avoid clashing with this entry) would have tied this feature's
+  shippability to Salesforce's.
+
+## Decision 14: Salesforce integration — Phase A (OAuth connect only)
+
+Starting the Salesforce quote-number integration (the third scoped item,
+picked up after the unsaved-changes guard). Confirmed with the user before
+building: an existing Salesforce org, quotes on the **standard `Quote`
+object** (child of `Opportunity`), an Opportunity created per deal (not
+matched against an existing one), and a **single shared connection**
+(mirrors Xero, not per-user like Gmail).
+
+**Deliberately scoped to OAuth connect only, not the actual quote push.**
+Salesforce's `Quote`/`Opportunity`/`QuoteLineItem` objects have real,
+org-specific configuration (required `Opportunity` fields, `StageName`
+picklist values, and whether `QuoteLineItem` requires a `PricebookEntryId`
+— it does on the standard object, which doesn't map cleanly onto this
+app's freeform line-item text) that can't be known without connecting
+first and inspecting the org live via Salesforce's `describe` API — same
+reasoning as why Xero's tax-rate/account-code settings were fetched live
+rather than hardcoded (Decision 5). Phase B (the actual push) is a
+separate, future plan once connected.
+
+- **`jsforce`** (new dependency) — the standard Node library for the
+  Salesforce REST API; no Salesforce-maintained SDK as polished as
+  `xero-node` exists. Checked its own dependency tree directly: it
+  introduces no new high-severity `npm audit` findings — the flagged ones
+  (`glob`/`minimatch`/`rimraf`/`brace-expansion`) all trace to the
+  pre-existing `googleapis` dependency, not jsforce.
+- **`salesforce_connections` (new table)**: same singleton shape as
+  `xero_connections` (`id=1`, `for all using(true)` RLS — the third
+  deliberately-shared, non-owner-scoped table in this schema). Has one
+  field with no Xero equivalent: **`instance_url`** — each Salesforce org
+  has its own API base URL, returned during token exchange and required on
+  every subsequent API call, so it's persisted alongside the refresh
+  token.
+- **`quotations` gets `salesforce_quote_id`/`salesforce_quote_number`/
+  `salesforce_pushed_at`/`salesforce_push_error`** — the same shape as
+  `invoices.xero_*`, added now even though Phase A doesn't populate them
+  yet. **Deliberately `text`, not `uuid`** — unlike
+  `clients.xero_contact_id` (which happens to be typed `uuid` since Xero's
+  GUIDs are valid UUIDs), Salesforce record IDs are 15/18-character
+  alphanumeric strings, not valid UUIDs. Copying the Xero column type here
+  would have been a real, easy-to-miss bug caught by checking directly
+  rather than pattern-matching blind.
+- **OAuth routes** (`app/api/auth/salesforce/{start,callback}`) apply the
+  lessons already paid for during Xero's post-ship fixes from the start,
+  rather than rediscovering them: `maxDuration = 60` on both routes, every
+  step after the token exchange wrapped in try/catch redirecting with the
+  real error message, and (unlike jsforce's `OAuth2.requestToken()`, which
+  doesn't validate state itself) an explicit state-cookie-vs-query-param
+  comparison in the callback before proceeding — Xero's equivalent check
+  was implicitly handled inside `openid-client`'s `apiCallback()`, so this
+  had to be added explicitly here.
+- **`lib/salesforce/client.ts`** eagerly calls
+  `oauth2.refreshToken(storedRefreshToken)` once per invocation and
+  persists the result before returning, mirroring `lib/xero/client.ts`'s
+  pattern exactly — even though Salesforce doesn't rotate refresh tokens by
+  default the way Xero does, an org's Connected App policy can enable
+  rotation, so persisting defensively costs nothing and doesn't assume a
+  behavior that could differ by org.
+- **Settings UI** (`SalesforceSettings.tsx`) is connect/disconnect-status
+  only in Phase A — explicitly says "quote push isn't built yet" rather
+  than implying more than what's actually wired up.
+- **Shipped to a preview deployment first, not merged to `main`** — the
+  user asked to hold off on merging until the OAuth round-trip is
+  confirmed working against a real Connected App, rather than shipping
+  straight to production like every previous integration this session.
+
+## Decision 15: Salesforce integration — Phase B (quote push)
+
+Phase A's OAuth connect is confirmed working end-to-end on the preview
+deployment (after fixing a PKCE requirement, an unused `id`/`openid` scope,
+and a stale per-deployment redirect URI — see the connect flow's own commit
+history on this branch). This phase adds the actual push.
+
+Confirmed directly with the user, resolving Phase A's open questions:
+
+- **Quotes are pushed empty — no `QuoteLineItem` rows at all.** The user's
+  own existing manual convention: "usually the SFDC quotes dont have a line
+  item we just name it quote 1" — Salesforce is used purely as a
+  quote-number generator here, not a line-item mirror. This removes the
+  `PricebookEntryId`/Product-mapping problem entirely rather than solving it.
+- **The Opportunity is NOT created as Closed Won.** The user's own
+  correction to my first draft of this plan: keep it open when the quote is
+  pushed, and only flip to Closed Won once there's a real signal the deal
+  closed — specifically, **a matching PO confirmed AND the invoice sent**.
+  More accurate than rubber-stamping "won" the moment a quote goes out, and
+  ties Salesforce's pipeline state to something this app already tracks
+  rather than an arbitrary default.
+
+Mechanically:
+
+- **`lib/salesforce/accounts.ts`**: `findOrCreateSalesforceAccount` mirrors
+  `lib/xero/contacts.ts`'s `findOrCreateXeroContact` exactly — check
+  `clients.salesforce_account_id` first, else search by `Name`, else create,
+  then persist the ID back. Same three-step shape, new cached-ID column
+  (`clients.salesforce_account_id`, mirroring `clients.xero_contact_id`).
+- **`pushQuotationToSalesforce`** (`app/(app)/quotes/actions.ts`) mirrors
+  `pushInvoiceToXero`'s conventions exactly: never throws, returns
+  `{ error? }`, records failures onto `quotations.salesforce_push_error` so
+  state survives a page refresh. Creates the Account (if needed) →
+  Opportunity (`StageName: "Proposal/Price Quote"`, an open stage; `CloseDate`
+  from the quotation's own `valid_until`/`quote_date`; `Amount` computed from
+  the local line items even though none get pushed as `QuoteLineItem` rows —
+  free deal-size visibility in Salesforce reporting) → empty Quote (`Name:
+  "Quote 1"`, matching the user's own convention). Retrieves the
+  Salesforce-generated `QuoteNumber` and writes it back onto the quotation
+  row along with the new `quotations.salesforce_opportunity_id` column.
+  Unlike Xero's errors (buried in `.response.data`, needing
+  `describeXeroError`), jsforce/Salesforce REST errors already carry a
+  usable `.message` — no error-unwrapping helper needed here.
+- **`lib/salesforce/opportunityStage.ts`**: `syncOpportunityStageForInvoice`
+  is the PO-confirmed-AND-invoice-sent check. Investigated the existing
+  PO-matching pipeline directly rather than assuming a hook point exists —
+  it doesn't: PO-match-confirmed lives entirely as a `status = "resolved"`
+  row in `unmatched_email_pos` (set by `resolveUnmatchedEmailPo`), and
+  invoice status becomes `"Sent"` from three independent places
+  (`setInvoiceStatus`, `refreshInvoiceFromXero`,
+  `checkInvoicesAgainstXero`'s bulk loop) that don't share a chokepoint.
+  Rather than duplicate the two-condition check four times, one shared
+  helper is called from all four places whenever either condition can newly
+  become true. It's deliberately never-throwing (writes failures onto
+  `quotations.salesforce_push_error` instead) and idempotent (safe to call
+  redundantly — flipping an already-Closed-Won Opportunity to Closed Won
+  again is a harmless no-op), so every call site fires it unconditionally
+  rather than tracking "did we already do this."
+- **Two new columns**: `clients.salesforce_account_id`,
+  `quotations.salesforce_opportunity_id` (`text`, matching Phase A's
+  `salesforce_quote_id`'s reasoning — Salesforce IDs aren't valid UUIDs).
+  The four `quotations.salesforce_*` columns from Phase A
+  (`salesforce_quote_id`/`salesforce_quote_number`/`salesforce_pushed_at`/
+  `salesforce_push_error`) are reused as-is.
+- **Still shipped to the same unmerged branch/preview deployment, not
+  `main`** — same reasoning as Phase A: confirm the actual push works
+  end-to-end against the real org (in particular, whether `"Proposal/Price
+  Quote"` is a valid `StageName` in this org — flagged in the code as the
+  one detail most likely to need adjusting from a real Salesforce error,
+  the same debugging pattern that resolved every Phase A surprise) before
+  merging.
+
+## Decision 16: Fix "same bubble" Opportunity validation error on Salesforce push
+
+First real push attempt against the live org failed with a custom validation
+rule: "Opportunity Owner and Opportunity Referrer cannot be from the same
+bubble!" — Phase B's push never set either field, so Salesforce defaulted
+both from the connected integration user's own record and they collided.
+
+The user's proposed fix, confirmed directly: a **per-user** "DP Bubble"
+setting (different staff belong to different bubbles and any of them might
+push a quote — not a shared app-wide value like the Xero/Salesforce
+connections), written into the Opportunity's **"Opportunity Owner (Custom)"**
+field at push time, plus setting **"Cross-sell Opportunity"** to No/false.
+"Opportunity Referrer" itself is left untouched — its existing default is
+fine, the fix is just making sure Owner doesn't collide with it.
+
+- **Both custom fields are resolved dynamically via Salesforce's `describe()`
+  API, matched by their visible label, rather than hardcoded API names** —
+  `lib/salesforce/opportunityFields.ts`'s `findOpportunityFieldByLabel(conn, label)`.
+  Same reasoning as every other org-specific Salesforce detail this project
+  has handled (Decision 5's live tax settings, Decision 14/15's live-error
+  field discovery): custom field API names are unpredictable, and this avoids
+  needing the user to manually look them up in Setup at all. It also means
+  the Settings dropdown populates itself from Salesforce's actual live
+  picklist values instead of a hand-typed list.
+- **`profiles.dp_bubble` (new column)** — added to `ProfileForm.tsx`
+  alongside the existing `full_name`/`title` fields, following the same
+  per-user pattern (`saveProfile`'s upsert, owner-scoped RLS already in place
+  on `profiles`). A new `getDpBubbleOptions()` action fetches the live
+  picklist values for display; the form degrades gracefully (shows the error,
+  keeps whatever's already saved) if Salesforce is unreachable, since this
+  page isn't fundamentally about Salesforce.
+- **`pushQuotationToSalesforce` now calls `supabase.auth.getUser()`** (it
+  didn't before) to use the **acting/pushing user's** bubble, not the
+  quotation's original `owner_id` — "Opportunity Owner" should reflect
+  whoever is actually doing the push. Fails fast with a clear message
+  ("Set your DP Bubble in Settings...") before even attempting the
+  Salesforce connection if the pushing user hasn't set one.
+- **Cross-sell Opportunity's "No" value is type-aware**: if the field
+  describes as `boolean`, sets `false` directly; if it's a picklist, finds
+  the entry whose label matches "no" case-insensitively and uses its value.
+  Avoids assuming the field's shape.
+- Still on the same unmerged branch/preview deployment as the rest of the
+  Salesforce work — not merged to `main`.
+
+## Decision 17: Quote number as source of truth, duplicate-push guard, indicative Opportunity naming
+
+Follow-ups after the first successful live push:
+
+- **`pushQuotationToSalesforce` now writes the Salesforce-generated
+  `QuoteNumber` into `quotations.quote_number` itself**, not just
+  `salesforce_quote_number` — this was already anticipated in
+  `docs/HANDOFF.md`'s "what's next" (Salesforce as the source of truth for
+  quote numbers rather than the freeform text field). No other file needed
+  to change: every existing display site (`quotes/page.tsx`,
+  `quotes/[id]/page.tsx`, the PDF route, `board/page.tsx`, PO review) already
+  reads `quotation.quote_number` directly.
+- **The quote number is now a hyperlink to the Salesforce Opportunity**
+  (`${instance_url}/${salesforce_opportunity_id}`) on the quotes list and
+  detail pages, via a new `lib/salesforce/instanceUrl.ts` —
+  `getSalesforceInstanceUrl()` is a cheap direct read with no OAuth refresh,
+  unlike `getSalesforceClientForConnection()`. On the list page this is
+  added as a small separate icon rather than replacing the existing
+  `/quotes/${id}` link, to avoid breaking in-app navigation to the quote
+  detail page.
+- **Duplicate-push guard**: `pushQuotationToSalesforce` now rejects outright
+  if `salesforce_quote_id` is already set, rather than relying solely on the
+  UI hiding the push button once pushed.
+- **Indicative Opportunity naming**: `"{client} - {gist} - {year}"` instead
+  of a generic `"{client} - Quotation"`. The gist comes from a new
+  `quotations.title` field (optional, user-editable via `QuoteForm.tsx`); if
+  left blank at push time, a cheap AI call
+  (`lib/salesforce/generateQuotationTitle.ts`, modeled directly on the
+  existing `fuzzyMatchClient.ts` pattern — `claude-haiku-4-5-20251001`,
+  small `max_tokens`, hand-written JSON-schema prompt) summarizes the line
+  items into a short title, persisted back onto `quotations.title` so it's
+  not regenerated and is visible/editable afterward.
+- **Region was considered and dropped.** The user's original ask included a
+  region segment in the Opportunity name; asked where region should live
+  (per-client vs per-quotation) and got redirected mid-implementation —
+  explicit pushback that adding it half-thought-through (no established
+  source, no valid-values list) risked more problems downstream than it
+  solved. Removed entirely rather than shipping a guessed default; can be
+  scoped properly as its own follow-up later.
+- Still on the same unmerged branch/preview deployment — not merged to
+  `main`.

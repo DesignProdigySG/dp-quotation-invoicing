@@ -66,6 +66,7 @@ export type Database = {
           id: string
           name: string
           owner_id: string
+          salesforce_account_id: string | null
           updated_at: string
           xero_contact_id: string | null
         }
@@ -82,6 +83,7 @@ export type Database = {
           id?: string
           name: string
           owner_id: string
+          salesforce_account_id?: string | null
           updated_at?: string
           xero_contact_id?: string | null
         }
@@ -98,6 +100,7 @@ export type Database = {
           id?: string
           name?: string
           owner_id?: string
+          salesforce_account_id?: string | null
           updated_at?: string
           xero_contact_id?: string | null
         }
@@ -328,6 +331,7 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          dp_bubble: string | null
           full_name: string | null
           owner_id: string
           signature_path: string | null
@@ -336,6 +340,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dp_bubble?: string | null
           full_name?: string | null
           owner_id: string
           signature_path?: string | null
@@ -344,6 +349,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dp_bubble?: string | null
           full_name?: string | null
           owner_id?: string
           signature_path?: string | null
@@ -403,11 +409,13 @@ export type Database = {
           owner_id: string
           quote_date: string
           quote_number: string | null
+          salesforce_opportunity_id: string | null
           salesforce_push_error: string | null
           salesforce_pushed_at: string | null
           salesforce_quote_id: string | null
           salesforce_quote_number: string | null
           status: string
+          title: string | null
           updated_at: string
           valid_until: string | null
         }
@@ -426,11 +434,13 @@ export type Database = {
           owner_id: string
           quote_date?: string
           quote_number?: string | null
+          salesforce_opportunity_id?: string | null
           salesforce_push_error?: string | null
           salesforce_pushed_at?: string | null
           salesforce_quote_id?: string | null
           salesforce_quote_number?: string | null
           status?: string
+          title?: string | null
           updated_at?: string
           valid_until?: string | null
         }
@@ -449,11 +459,13 @@ export type Database = {
           owner_id?: string
           quote_date?: string
           quote_number?: string | null
+          salesforce_opportunity_id?: string | null
           salesforce_push_error?: string | null
           salesforce_pushed_at?: string | null
           salesforce_quote_id?: string | null
           salesforce_quote_number?: string | null
           status?: string
+          title?: string | null
           updated_at?: string
           valid_until?: string | null
         }

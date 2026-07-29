@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { syncOpportunityStageForInvoice } from "@/lib/salesforce/opportunityStage";
 
 export async function resolveUnmatchedEmailPo(
   id: string,
@@ -41,6 +42,8 @@ export async function resolveUnmatchedEmailPo(
     })
     .eq("id", id);
   if (error) throw new Error(error.message);
+
+  await syncOpportunityStageForInvoice(input.invoiceId);
 
   revalidatePath("/review/purchase-orders");
   revalidatePath("/invoices");

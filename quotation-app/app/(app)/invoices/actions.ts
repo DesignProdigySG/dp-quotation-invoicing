@@ -10,6 +10,7 @@ import { buildInvoicePayload } from "@/lib/xero/buildInvoicePayload";
 import { describeXeroError } from "@/lib/xero/describeError";
 import { computeInvoiceUpdateFromXero } from "@/lib/xero/applyXeroInvoiceToRow";
 import type { AppStatus } from "@/lib/xero/nextAppStatus";
+import { syncOpportunityStageForInvoice } from "@/lib/salesforce/opportunityStage";
 
 export type InvoiceInput = {
   due_date: string | null;
@@ -186,6 +187,10 @@ export async function setInvoiceStatus(id: string, status: "Draft" | "Sent" | "P
   const supabase = await createClient();
   const { error } = await supabase.from("invoices").update({ status }).eq("id", id);
   if (error) throw new Error(error.message);
+
+  if (status === "Sent" || status === "Paid") {
+    await syncOpportunityStageForInvoice(id);
+  }
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${id}`);
@@ -384,6 +389,10 @@ export async function refreshInvoiceFromXero(invoiceId: string): Promise<{ error
       .eq("id", invoiceId);
     if (updateError) return { error: updateError.message };
 
+    if (update.status === "Sent" || update.status === "Paid") {
+      await syncOpportunityStageForInvoice(invoiceId);
+    }
+
     revalidatePath(`/invoices/${invoiceId}`);
     revalidatePath("/invoices");
     return {};
@@ -470,6 +479,10 @@ export async function checkInvoicesAgainstXero(): Promise<CheckXeroStatusResult>
 
         if (update.status === "Paid") updatedToPaid++;
         else if (update.status === "Sent") updatedToSent++;
+
+        if (update.status === "Sent" || update.status === "Paid") {
+          await syncOpportunityStageForInvoice(local.id);
+        }
       }
     }
 
