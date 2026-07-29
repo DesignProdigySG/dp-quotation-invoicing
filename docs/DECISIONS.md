@@ -746,3 +746,75 @@ separate, future plan once connected.
   user asked to hold off on merging until the OAuth round-trip is
   confirmed working against a real Connected App, rather than shipping
   straight to production like every previous integration this session.
+
+## Decision 14: Salesforce integration — Phase B (quote push)
+
+Phase A's OAuth connect is confirmed working end-to-end on the preview
+deployment (after fixing a PKCE requirement, an unused `id`/`openid` scope,
+and a stale per-deployment redirect URI — see the connect flow's own commit
+history on this branch). This phase adds the actual push.
+
+Confirmed directly with the user, resolving Phase A's open questions:
+
+- **Quotes are pushed empty — no `QuoteLineItem` rows at all.** The user's
+  own existing manual convention: "usually the SFDC quotes dont have a line
+  item we just name it quote 1" — Salesforce is used purely as a
+  quote-number generator here, not a line-item mirror. This removes the
+  `PricebookEntryId`/Product-mapping problem entirely rather than solving it.
+- **The Opportunity is NOT created as Closed Won.** The user's own
+  correction to my first draft of this plan: keep it open when the quote is
+  pushed, and only flip to Closed Won once there's a real signal the deal
+  closed — specifically, **a matching PO confirmed AND the invoice sent**.
+  More accurate than rubber-stamping "won" the moment a quote goes out, and
+  ties Salesforce's pipeline state to something this app already tracks
+  rather than an arbitrary default.
+
+Mechanically:
+
+- **`lib/salesforce/accounts.ts`**: `findOrCreateSalesforceAccount` mirrors
+  `lib/xero/contacts.ts`'s `findOrCreateXeroContact` exactly — check
+  `clients.salesforce_account_id` first, else search by `Name`, else create,
+  then persist the ID back. Same three-step shape, new cached-ID column
+  (`clients.salesforce_account_id`, mirroring `clients.xero_contact_id`).
+- **`pushQuotationToSalesforce`** (`app/(app)/quotes/actions.ts`) mirrors
+  `pushInvoiceToXero`'s conventions exactly: never throws, returns
+  `{ error? }`, records failures onto `quotations.salesforce_push_error` so
+  state survives a page refresh. Creates the Account (if needed) →
+  Opportunity (`StageName: "Proposal/Price Quote"`, an open stage; `CloseDate`
+  from the quotation's own `valid_until`/`quote_date`; `Amount` computed from
+  the local line items even though none get pushed as `QuoteLineItem` rows —
+  free deal-size visibility in Salesforce reporting) → empty Quote (`Name:
+  "Quote 1"`, matching the user's own convention). Retrieves the
+  Salesforce-generated `QuoteNumber` and writes it back onto the quotation
+  row along with the new `quotations.salesforce_opportunity_id` column.
+  Unlike Xero's errors (buried in `.response.data`, needing
+  `describeXeroError`), jsforce/Salesforce REST errors already carry a
+  usable `.message` — no error-unwrapping helper needed here.
+- **`lib/salesforce/opportunityStage.ts`**: `syncOpportunityStageForInvoice`
+  is the PO-confirmed-AND-invoice-sent check. Investigated the existing
+  PO-matching pipeline directly rather than assuming a hook point exists —
+  it doesn't: PO-match-confirmed lives entirely as a `status = "resolved"`
+  row in `unmatched_email_pos` (set by `resolveUnmatchedEmailPo`), and
+  invoice status becomes `"Sent"` from three independent places
+  (`setInvoiceStatus`, `refreshInvoiceFromXero`,
+  `checkInvoicesAgainstXero`'s bulk loop) that don't share a chokepoint.
+  Rather than duplicate the two-condition check four times, one shared
+  helper is called from all four places whenever either condition can newly
+  become true. It's deliberately never-throwing (writes failures onto
+  `quotations.salesforce_push_error` instead) and idempotent (safe to call
+  redundantly — flipping an already-Closed-Won Opportunity to Closed Won
+  again is a harmless no-op), so every call site fires it unconditionally
+  rather than tracking "did we already do this."
+- **Two new columns**: `clients.salesforce_account_id`,
+  `quotations.salesforce_opportunity_id` (`text`, matching Phase A's
+  `salesforce_quote_id`'s reasoning — Salesforce IDs aren't valid UUIDs).
+  The four `quotations.salesforce_*` columns from Phase A
+  (`salesforce_quote_id`/`salesforce_quote_number`/`salesforce_pushed_at`/
+  `salesforce_push_error`) are reused as-is.
+- **Still shipped to the same unmerged branch/preview deployment, not
+  `main`** — same reasoning as Phase A: confirm the actual push works
+  end-to-end against the real org (in particular, whether `"Proposal/Price
+  Quote"` is a valid `StageName` in this org — flagged in the code as the
+  one detail most likely to need adjusting from a real Salesforce error,
+  the same debugging pattern that resolved every Phase A surprise) before
+  merging.

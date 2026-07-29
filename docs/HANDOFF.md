@@ -102,8 +102,11 @@ other session or agent.
 - `SALESFORCE_CLIENT_ID`, `SALESFORCE_CLIENT_SECRET`, `SALESFORCE_REDIRECT_URI`,
   `SALESFORCE_TOKEN_ENCRYPTION_KEY` (same `lib/crypto.ts` pattern as Xero's),
   `SALESFORCE_LOGIN_URL` (optional, defaults to `https://login.salesforce.com`
-  — set to `https://test.salesforce.com` for a sandbox org). OAuth-connect
-  only so far (Decision 13 in `docs/DECISIONS.md`) — no quote push yet.
+  — set to `https://test.salesforce.com` for a sandbox org). OAuth connect
+  (Decision 13) and quote push (Decision 14, both in `docs/DECISIONS.md`) are
+  both built — quotes push as an empty standard Quote under an open-stage
+  Opportunity, which later flips to Closed Won once a PO is matched and the
+  linked invoice is sent. Still on the preview deployment only, not merged.
 - `ANTHROPIC_API_KEY`
 - `EMAIL_QUOTE_WEBHOOK_SECRET`, `CRON_SECRET` — both vestigial (the n8n webhook and
   the cron job were superseded by the in-app pipeline above); harmless to leave, fine
@@ -111,13 +114,12 @@ other session or agent.
 
 ## What's next (confirmed priorities, in order)
 
-**1. Salesforce-generated quote numbers with PDF-download gating.** Confirmed
-next priority (Xero invoice push, previously #1 here, shipped this session —
-see Feature map above and `docs/DECISIONS.md` Decision 5). Not yet scoped. The
-original reference material for this project's docx-based quotation generator
-used a `{{SalesforceQuoteNo}}` placeholder, suggesting the intent is for
-Salesforce to be the source of truth for quote numbers rather than the
-freeform text field this app currently has.
+**1. PDF-download gating on the Salesforce quote number.** Salesforce quote
+push itself is now built (Decision 14) — `quotations.salesforce_quote_number`
+gets populated on push. Not yet scoped: gating/disabling "Download PDF" until
+that field is set, per the original reference material's
+`{{SalesforceQuoteNo}}` placeholder intent (Salesforce as the source of truth
+for quote numbers rather than the freeform `quote_number` text field).
 
 **Fast-follows on the Xero v1 cuts, not yet prioritized:**
 - Multi-currency Xero push (v1 is SGD-only — see Decision 5 for why).
