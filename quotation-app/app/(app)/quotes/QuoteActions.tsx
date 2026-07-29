@@ -68,9 +68,15 @@ export default function QuoteActions({
   async function remove() {
     if (!confirm("Delete this quotation? This cannot be undone.")) return;
     setBusy(true);
+    setError(null);
     try {
-      await deleteQuotation(quoteId);
-      router.push("/quotes");
+      const result = await deleteQuotation(quoteId);
+      if (result.error) {
+        setError(result.error);
+        setBusy(false);
+      } else {
+        router.push("/quotes");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
       setBusy(false);

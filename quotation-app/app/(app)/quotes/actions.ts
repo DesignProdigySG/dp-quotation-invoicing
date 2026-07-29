@@ -149,7 +149,10 @@ const SALESFORCE_ALREADY_DELETED_CODES = [
   "INVALID_CROSS_REFERENCE_KEY",
 ];
 
-export async function deleteQuotation(id: string) {
+// Never throws — a thrown Server Action error is redacted to a generic
+// message in production (same reasoning as pushQuotationToSalesforce and
+// the Settings actions), so failures are returned as { error } instead.
+export async function deleteQuotation(id: string): Promise<{ error?: string }> {
   const supabase = await createClient();
 
   const { data: quotation } = await supabase
@@ -168,31 +171,32 @@ export async function deleteQuotation(id: string) {
   // Salesforce first), which isn't a failure at all, since the goal (no
   // Opportunity) is already achieved.
   if (quotation?.salesforce_opportunity_id) {
-    const { conn } = await getSalesforceClientForConnection();
     try {
+      const { conn } = await getSalesforceClientForConnection();
       const result = await conn
         .sobject("Opportunity")
         .destroy(quotation.salesforce_opportunity_id);
       if (!result.success) {
         const errorCode = result.errors[0]?.errorCode;
         if (!errorCode || !SALESFORCE_ALREADY_DELETED_CODES.includes(errorCode)) {
-          throw new Error(result.errors[0]?.message || "Salesforce rejected the delete");
+          return { error: result.errors[0]?.message || "Salesforce rejected the delete" };
         }
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       const alreadyGone = SALESFORCE_ALREADY_DELETED_CODES.some((code) => message.includes(code));
       if (!alreadyGone) {
-        throw new Error(`Failed to delete linked Salesforce Opportunity: ${message}`);
+        return { error: `Failed to delete linked Salesforce Opportunity: ${message}` };
       }
     }
   }
 
   const { error } = await supabase.from("quotations").delete().eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
 
   revalidatePath("/quotes");
   revalidatePath("/board");
+  return {};
 }
 
 export async function convertQuotationToInvoice(quotationId: string) {
