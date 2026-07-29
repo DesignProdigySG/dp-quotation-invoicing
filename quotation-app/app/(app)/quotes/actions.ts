@@ -226,7 +226,7 @@ export async function convertQuotationToInvoice(quotationId: string) {
 // syncOpportunityStageForInvoice, once a PO is matched AND the invoice is
 // sent (see lib/salesforce/opportunityStage.ts).
 const OPPORTUNITY_OWNER_FIELD_LABEL = "Opportunity Owner (Custom)";
-const CROSS_SELL_FIELD_LABEL = "Cross-sell Opportunity";
+const CROSS_SELL_FIELD_LABEL = "Cross-sell Opportunity?";
 
 export async function pushQuotationToSalesforce(
   quotationId: string
