@@ -360,7 +360,8 @@ export async function pushQuotationToSalesforce(
     }
 
     const created = await conn.sobject("Quote").retrieve(quote.id);
-    const quoteNumber = (created as { QuoteNumber?: string }).QuoteNumber ?? null;
+    const quoteNumber =
+      (created as { Custom_quote_number__c?: string }).Custom_quote_number__c ?? null;
 
     const { error: updateError } = await supabase
       .from("quotations")
