@@ -23,6 +23,125 @@ export type InvoiceInput = {
   line_items: LineItemInput[];
 };
 
+export type CreateInvoiceInput = {
+  client_id: string;
+  due_date: string | null;
+  reference?: string | null;
+  currency: string;
+  gst_rate: number;
+  gst_applicable: boolean;
+  exchange_rate?: number | null;
+  display_currency: "original" | "sgd";
+  billing_address_id?: string | null;
+  billing_address?: string | null;
+  notes?: string;
+  external_quote_status: "has_external_quote" | "no_quote";
+  external_quote_number?: string | null;
+  line_items: LineItemInput[];
+};
+
+// Directly creates an invoice with no source quotation — mirrors
+// convertQuotationToInvoice's insert shape (in ../quotes/actions.ts) but
+// leaves quotation_id null and takes due_date/external_quote_* directly from
+// the form instead of inheriting them from a quote.
+export async function createInvoice(input: CreateInvoiceInput) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in");
+
+  const { data: invoice, error } = await supabase
+    .from("invoices")
+    .insert({
+      owner_id: user.id,
+      client_id: input.client_id,
+      due_date: input.due_date,
+      reference: input.reference || null,
+      currency: input.currency,
+      gst_rate: input.gst_rate,
+      gst_applicable: input.gst_applicable,
+      exchange_rate: input.exchange_rate ?? null,
+      display_currency: input.display_currency,
+      billing_address_id: input.billing_address_id ?? null,
+      billing_address: input.billing_address ?? null,
+      notes: input.notes || null,
+      external_quote_status: input.external_quote_status,
+      external_quote_number: input.external_quote_number || null,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  if (input.line_items.length > 0) {
+    const { error: liError } = await supabase.from("invoice_line_items").insert(
+      input.line_items.map((li, idx) => ({
+        invoice_id: invoice.id,
+        description: li.description,
+        quantity: li.quantity,
+        unit_price: li.unit_price,
+        sort_order: idx,
+      }))
+    );
+    if (liError) throw new Error(liError.message);
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath("/board");
+  return invoice;
+}
+
+const ALLOWED_EXTERNAL_QUOTE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+];
+const MAX_EXTERNAL_QUOTE_FILE_BYTES = 10 * 1024 * 1024;
+
+// Mirrors uploadSignature (app/(app)/settings/actions.ts) exactly: never
+// throws, validates type/size, uploads to a private per-owner Storage path.
+export async function uploadExternalQuoteFile(
+  invoiceId: string,
+  formData: FormData
+): Promise<{ error?: string }> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthorized" };
+
+    const file = formData.get("file");
+    if (!(file instanceof File)) return { error: "No file provided" };
+    if (!ALLOWED_EXTERNAL_QUOTE_TYPES.includes(file.type)) {
+      return { error: "The quotation file must be a PNG, JPG, GIF, WEBP, or PDF" };
+    }
+    if (file.size > MAX_EXTERNAL_QUOTE_FILE_BYTES) {
+      return { error: "The quotation file must be under 10MB" };
+    }
+
+    const path = `${user.id}/${randomUUID()}-${file.name}`;
+    const { error: uploadError } = await supabase.storage
+      .from("external-quotes")
+      .upload(path, file, { contentType: file.type });
+    if (uploadError) return { error: uploadError.message };
+
+    const { error } = await supabase
+      .from("invoices")
+      .update({ external_quote_file_path: path })
+      .eq("id", invoiceId);
+    if (error) return { error: error.message };
+
+    revalidatePath(`/invoices/${invoiceId}`);
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
 export async function updateInvoice(id: string, input: InvoiceInput) {
   const supabase = await createClient();
 

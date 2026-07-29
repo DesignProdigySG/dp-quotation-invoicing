@@ -24,6 +24,14 @@ export default async function InvoiceDetailPage({
 
   if (!invoice) notFound();
 
+  let externalQuoteFileUrl: string | null = null;
+  if (invoice.external_quote_file_path) {
+    const { data } = await supabase.storage
+      .from("external-quotes")
+      .createSignedUrl(invoice.external_quote_file_path, 3600);
+    externalQuoteFileUrl = data?.signedUrl ?? null;
+  }
+
   const { data: billingAddresses } = await supabase
     .from("client_billing_addresses")
     .select("id, label, address")
@@ -61,6 +69,9 @@ export default async function InvoiceDetailPage({
             xeroStatus={invoice.xero_status}
             xeroPushedAt={invoice.xero_pushed_at}
             xeroPushError={invoice.xero_push_error}
+            externalQuoteStatus={invoice.external_quote_status}
+            externalQuoteNumber={invoice.external_quote_number}
+            externalQuoteFileUrl={externalQuoteFileUrl}
           />
         </div>
 

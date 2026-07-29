@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney, computeTotals } from "@/lib/format";
 import { xeroStatusLabel } from "@/lib/xero/statusLabel";
 import CheckXeroStatusButton from "./CheckXeroStatusButton";
+import NewInvoiceButton from "./NewInvoiceButton";
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status.toLowerCase()}`}>{status}</span>;
@@ -21,10 +22,13 @@ export default async function InvoicesPage() {
         <div>
           <h1>Invoices</h1>
           <p className="subtitle">
-            Invoices are created by converting a quotation. Go to a quote to convert it.
+            Invoices are created by converting a quotation, or directly below.
           </p>
         </div>
-        <CheckXeroStatusButton />
+        <div className="actions">
+          <NewInvoiceButton />
+          <CheckXeroStatusButton />
+        </div>
       </div>
 
       <div className="card">
