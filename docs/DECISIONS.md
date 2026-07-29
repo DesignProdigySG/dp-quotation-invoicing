@@ -862,3 +862,45 @@ fine, the fix is just making sure Owner doesn't collide with it.
   Avoids assuming the field's shape.
 - Still on the same unmerged branch/preview deployment as the rest of the
   Salesforce work — not merged to `main`.
+
+## Decision 16: Quote number as source of truth, duplicate-push guard, indicative Opportunity naming
+
+Follow-ups after the first successful live push:
+
+- **`pushQuotationToSalesforce` now writes the Salesforce-generated
+  `QuoteNumber` into `quotations.quote_number` itself**, not just
+  `salesforce_quote_number` — this was already anticipated in
+  `docs/HANDOFF.md`'s "what's next" (Salesforce as the source of truth for
+  quote numbers rather than the freeform text field). No other file needed
+  to change: every existing display site (`quotes/page.tsx`,
+  `quotes/[id]/page.tsx`, the PDF route, `board/page.tsx`, PO review) already
+  reads `quotation.quote_number` directly.
+- **The quote number is now a hyperlink to the Salesforce Opportunity**
+  (`${instance_url}/${salesforce_opportunity_id}`) on the quotes list and
+  detail pages, via a new `lib/salesforce/instanceUrl.ts` —
+  `getSalesforceInstanceUrl()` is a cheap direct read with no OAuth refresh,
+  unlike `getSalesforceClientForConnection()`. On the list page this is
+  added as a small separate icon rather than replacing the existing
+  `/quotes/${id}` link, to avoid breaking in-app navigation to the quote
+  detail page.
+- **Duplicate-push guard**: `pushQuotationToSalesforce` now rejects outright
+  if `salesforce_quote_id` is already set, rather than relying solely on the
+  UI hiding the push button once pushed.
+- **Indicative Opportunity naming**: `"{client} - {gist} - {year}"` instead
+  of a generic `"{client} - Quotation"`. The gist comes from a new
+  `quotations.title` field (optional, user-editable via `QuoteForm.tsx`); if
+  left blank at push time, a cheap AI call
+  (`lib/salesforce/generateQuotationTitle.ts`, modeled directly on the
+  existing `fuzzyMatchClient.ts` pattern — `claude-haiku-4-5-20251001`,
+  small `max_tokens`, hand-written JSON-schema prompt) summarizes the line
+  items into a short title, persisted back onto `quotations.title` so it's
+  not regenerated and is visible/editable afterward.
+- **Region was considered and dropped.** The user's original ask included a
+  region segment in the Opportunity name; asked where region should live
+  (per-client vs per-quotation) and got redirected mid-implementation —
+  explicit pushback that adding it half-thought-through (no established
+  source, no valid-values list) risked more problems downstream than it
+  solved. Removed entirely rather than shipping a guessed default; can be
+  scoped properly as its own follow-up later.
+- Still on the same unmerged branch/preview deployment — not merged to
+  `main`.
