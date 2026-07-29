@@ -54,7 +54,13 @@ export default async function QuoteDetailPage({
       </div>
 
       <div className="card">
-        <QuoteActions quoteId={quotation.id} status={quotation.status} />
+        <QuoteActions
+          quoteId={quotation.id}
+          status={quotation.status}
+          salesforceQuoteId={quotation.salesforce_quote_id}
+          salesforceQuoteNumber={quotation.salesforce_quote_number}
+          salesforcePushError={quotation.salesforce_push_error}
+        />
       </div>
 
       <QuoteForm

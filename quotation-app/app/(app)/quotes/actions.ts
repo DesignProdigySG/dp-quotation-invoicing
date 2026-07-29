@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { addDaysToDateString } from "@/lib/format";
 import { BRAND } from "@/lib/pdf/brand";
+import { getSalesforceClientForConnection } from "@/lib/salesforce/client";
+import { findOrCreateSalesforceAccount } from "@/lib/salesforce/accounts";
 
 export type LineItemInput = {
   description: string;
@@ -210,4 +212,105 @@ export async function convertQuotationToInvoice(quotationId: string) {
   revalidatePath("/board");
 
   return invoice;
+}
+
+// Never throws — same convention as pushInvoiceToXero: failures are returned
+// as { error } and also persisted onto the quotation row
+// (salesforce_push_error) so the state survives a page refresh. Pushes an
+// empty Quote (no QuoteLineItem rows) under a newly-created Opportunity in
+// an open stage — confirmed with the user that Salesforce is used purely as
+// a quote-number generator here, matching their own existing manual
+// convention of unlined "Quote 1" records. The Opportunity is deliberately
+// left open; it only flips to Closed Won later via
+// syncOpportunityStageForInvoice, once a PO is matched AND the invoice is
+// sent (see lib/salesforce/opportunityStage.ts).
+export async function pushQuotationToSalesforce(
+  quotationId: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  const { data: quotation, error: fetchError } = await supabase
+    .from("quotations")
+    .select("*, clients(id, name, salesforce_account_id), quotation_line_items(*)")
+    .eq("id", quotationId)
+    .single();
+
+  if (fetchError || !quotation) {
+    return { error: "Quotation not found" };
+  }
+
+  const client = (quotation as any).clients as {
+    id: string;
+    name: string;
+    salesforce_account_id: string | null;
+  } | null;
+  if (!client) {
+    return { error: "This quotation has no client on record" };
+  }
+
+  const lineItems = ((quotation as any).quotation_line_items || []) as {
+    quantity: number;
+    unit_price: number;
+  }[];
+  const amount = lineItems.reduce((sum, li) => sum + li.quantity * li.unit_price, 0);
+
+  async function recordFailure(message: string) {
+    await supabase
+      .from("quotations")
+      .update({ salesforce_push_error: message })
+      .eq("id", quotationId);
+    return { error: message };
+  }
+
+  try {
+    const { conn } = await getSalesforceClientForConnection();
+
+    const accountId = await findOrCreateSalesforceAccount(conn, client);
+
+    const opportunity = await conn.sobject("Opportunity").create({
+      Name: `${client.name} - Quotation`,
+      AccountId: accountId,
+      // Left open on purpose — see function comment above. "Proposal/Price
+      // Quote" is a standard picklist value; if this org uses a different
+      // set of stage names, the real Salesforce error will name the valid
+      // ones and this is a one-line fix.
+      StageName: "Proposal/Price Quote",
+      CloseDate: quotation.valid_until ?? quotation.quote_date,
+      Amount: amount,
+    });
+    if (!opportunity.success) {
+      return await recordFailure(
+        opportunity.errors[0]?.message || "Salesforce rejected the Opportunity"
+      );
+    }
+
+    const quote = await conn.sobject("Quote").create({
+      Name: "Quote 1",
+      OpportunityId: opportunity.id,
+    });
+    if (!quote.success) {
+      return await recordFailure(quote.errors[0]?.message || "Salesforce rejected the Quote");
+    }
+
+    const created = await conn.sobject("Quote").retrieve(quote.id);
+    const quoteNumber = (created as { QuoteNumber?: string }).QuoteNumber ?? null;
+
+    const { error: updateError } = await supabase
+      .from("quotations")
+      .update({
+        salesforce_quote_id: quote.id,
+        salesforce_quote_number: quoteNumber,
+        salesforce_opportunity_id: opportunity.id,
+        salesforce_pushed_at: new Date().toISOString(),
+        salesforce_push_error: null,
+      })
+      .eq("id", quotationId);
+    if (updateError) return { error: updateError.message };
+
+    revalidatePath(`/quotes/${quotationId}`);
+    revalidatePath("/quotes");
+    return {};
+  } catch (e) {
+    return await recordFailure(e instanceof Error ? e.message : "Failed to push to Salesforce");
+  }
 }
