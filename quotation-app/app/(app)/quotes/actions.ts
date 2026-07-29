@@ -143,6 +143,12 @@ export async function setQuotationStatus(
   revalidatePath("/board");
 }
 
+const SALESFORCE_ALREADY_DELETED_CODES = [
+  "ENTITY_IS_DELETED",
+  "NOT_FOUND",
+  "INVALID_CROSS_REFERENCE_KEY",
+];
+
 export async function deleteQuotation(id: string) {
   const supabase = await createClient();
 
@@ -157,10 +163,29 @@ export async function deleteQuotation(id: string) {
   // deliberately left alone: it's shared across potentially many
   // quotations/deals for that client, so this app should never delete it
   // as a side effect of removing one quotation. If this fails, block the
-  // local delete rather than silently drifting out of sync with Salesforce.
+  // local delete rather than silently drifting out of sync with Salesforce —
+  // except when the Opportunity is already gone (e.g. deleted directly in
+  // Salesforce first), which isn't a failure at all, since the goal (no
+  // Opportunity) is already achieved.
   if (quotation?.salesforce_opportunity_id) {
     const { conn } = await getSalesforceClientForConnection();
-    await conn.sobject("Opportunity").destroy(quotation.salesforce_opportunity_id);
+    try {
+      const result = await conn
+        .sobject("Opportunity")
+        .destroy(quotation.salesforce_opportunity_id);
+      if (!result.success) {
+        const errorCode = result.errors[0]?.errorCode;
+        if (!errorCode || !SALESFORCE_ALREADY_DELETED_CODES.includes(errorCode)) {
+          throw new Error(result.errors[0]?.message || "Salesforce rejected the delete");
+        }
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      const alreadyGone = SALESFORCE_ALREADY_DELETED_CODES.some((code) => message.includes(code));
+      if (!alreadyGone) {
+        throw new Error(`Failed to delete linked Salesforce Opportunity: ${message}`);
+      }
+    }
   }
 
   const { error } = await supabase.from("quotations").delete().eq("id", id);
