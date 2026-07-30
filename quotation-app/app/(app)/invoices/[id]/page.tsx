@@ -90,6 +90,7 @@ export default async function InvoiceDetailPage({
             billing_address_id: invoice.billing_address_id,
             billing_address: invoice.billing_address,
             notes: invoice.notes || "",
+            internal_notes: invoice.internal_notes,
             line_items: lineItems,
           }}
         />

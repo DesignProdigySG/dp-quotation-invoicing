@@ -957,3 +957,107 @@ Follow-ups after the first successful live push:
   scoped properly as its own follow-up later.
 - Still on the same unmerged branch/preview deployment — not merged to
   `main`.
+
+## Decision 18: Live-debugged fixes to Decisions 16/17, then merged to `main`
+
+Real-world use surfaced two more field mismatches and a delete-sync gap, all
+confirmed directly against the live Salesforce org and production errors
+rather than guessed:
+
+- **Cross-sell Opportunity field label correction**: Decision 16's fix used
+  the label `"Cross-sell Opportunity"`; the user checked Salesforce's Object
+  Manager directly and confirmed the real label has a trailing `?` —
+  `"Cross-sell Opportunity?"`. `findOpportunityFieldByLabel` match string
+  updated accordingly.
+- **Quote number field correction**: Decision 17 read Salesforce's standard
+  `QuoteNumber` autonumber field (`0000XXXX` format), but the org's actual
+  quote numbering lives in a custom field, `Custom_quote_number__c` (labeled
+  "Quotation Number" in Setup, `Q-2...` format) — the one visible in the
+  Salesforce UI. `pushQuotationToSalesforce` now retrieves and stores that
+  field instead.
+- **Delete-sync**: deleting a quotation in-app now also deletes its linked
+  Salesforce Opportunity (optional per the user, but feasible so it was
+  built). Took three rounds of live debugging against real user-hit errors:
+  1. `conn.sobject("Opportunity").destroy()` had no try/catch — any failure
+     crashed unhandled.
+  2. jsforce's failure can be a thrown exception with a **lowercase,
+     space-separated** message (e.g. `"entity is deleted"`) rather than
+     only a structured `SaveResult.errors[0].errorCode` (e.g.
+     `ENTITY_IS_DELETED`) — both paths are now normalized and checked so an
+     Opportunity already deleted manually in Salesforce doesn't block the
+     in-app delete.
+  3. A genuine Postgres FK violation: `unmatched_email_quotes.resolved_quotation_id`
+     and `unmatched_email_pos.suggested_quotation_id` both default to
+     `NO ACTION` (unlike `quotation_line_items.quotation_id`'s `CASCADE` or
+     `invoices.quotation_id`'s `SET NULL`, confirmed via a direct
+     `information_schema` query) — `deleteQuotation` now nulls both out
+     before deleting the quotation, preserving the historical intake
+     records rather than blocking the delete.
+  - **`deleteQuotation` converted to the never-throw `{error?}` convention**
+    (matching `pushQuotationToSalesforce` and the Settings actions) — this
+    was necessary, not optional polish: a thrown Server Action error is
+    redacted to a generic message in production, which is why the same
+    unhelpful error kept reappearing across debugging rounds even though
+    the underlying causes were different each time.
+- **Merged to `main`** (PR #25, merge commit `0456127`) once confirmed
+  working end-to-end on the live preview. `docs/DECISIONS.md` conflict
+  resolved by renumbering (this file); `types/database.types.ts` conflict
+  resolved by regenerating fresh from the live schema, since Supabase
+  migrations aren't git-branch-scoped and the live DB already reflected both
+  branches' columns.
+
+## Decision 19: PDF preview/download nudge instead of hard gating
+
+`docs/HANDOFF.md`'s next-priority item asked for gating "Download PDF"
+until a quotation has a real Salesforce quote number. Hard gating (blocking
+the route, disabling the button) was considered and rejected by the user —
+people legitimately want to preview a PDF before pushing to Salesforce, and
+the PDF route already serves `Content-Disposition: inline`, so it's always
+functioned as an in-tab preview rather than a forced download.
+
+- Button relabeled from "Download PDF" to **"Preview/Download PDF"** to
+  reflect what it's actually always done.
+- If the quotation hasn't been pushed yet (`!salesforceQuoteId`), clicking
+  shows a `confirm()` dialog warning the PDF won't have the official
+  Salesforce-sourced quote number, with an option to cancel; once pushed,
+  no dialog at all.
+- No server-side gating added to `app/api/quotes/[id]/pdf/route.ts` — kept
+  deliberately simple (nudge, not enforcement) per the user's call. Fixed
+  one small independent bug while in that file: the PDF filename fell back
+  to raw `quotation.quote_number` (`null` before a push, producing a
+  `"null.pdf"`-ish filename); now uses the same `quote_number || id`
+  fallback already used for the in-document `docNumber`.
+
+## Decision 20: Internal notes, hide contact info on quote PDFs, invoice PDFs from Xero
+
+Three follow-up asks from the same conversation as Decision 19:
+
+- **Internal notes**: a new `internal_notes` column (nullable text) on both
+  `quotations` and `invoices`, distinct from the existing client-facing
+  `notes` field. Wired through `createQuotation`/`updateQuotation`/
+  `createInvoice`/`updateInvoice`, a second textarea in `QuoteForm.tsx`/
+  `InvoiceForm.tsx` labeled "Internal Notes (not shown on the PDF...)", and
+  carried over in `convertQuotationToInvoice` alongside the existing
+  `notes` carry-over. Deliberately **not** wired into `DocumentPdf` or the
+  Xero invoice payload builder — that omission is the entire point.
+- **Hide contact name/email on quotation PDFs**: `app/api/quotes/[id]/pdf/route.ts`'s
+  `clients(...)` select trimmed to `name, billing_address` — `DocumentPdf`
+  already guards both fields with `client.contact_name &&`/
+  `client.contact_email &&`, so simply not fetching them is enough, no
+  template change needed. Scoped to quotations only, per the user — billing
+  address is the intended place for that detail if needed at all.
+- **Invoice PDFs now come from Xero, not self-rendered**: realized
+  mid-conversation that since invoices are pushed to Xero as the system of
+  record, "Download PDF" should fetch Xero's own generated PDF rather than
+  re-rendering one via `DocumentPdf`/`@react-pdf/renderer` — and should
+  only be available once actually pushed (`xero_invoice_id` set), unlike
+  quotations, since an unpushed invoice isn't a real invoice yet (no
+  "preview before push" case worth supporting here). `app/api/invoices/[id]/pdf/route.ts`
+  rewritten to call `xero.accountingApi.getInvoiceAsPdf(tenantId, xero_invoice_id)`
+  (existing `xero-node` SDK method, confirmed directly in
+  `node_modules/xero-node/dist/gen/api/accountingApi.d.ts`, reusing the
+  existing `getXeroClientForConnection()`) and return a 409 if not yet
+  pushed; `InvoiceActions.tsx`'s "Download PDF" is now a disabled button
+  with a tooltip until `xeroInvoiceId` is set. `DocumentPdf.tsx` itself is
+  left untouched (still shared with quotes) — only the invoice route
+  stopped calling it.

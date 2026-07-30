@@ -83,6 +83,15 @@ export default function QuoteActions({
     }
   }
 
+  function handlePdfClick(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (!salesforceQuoteId) {
+      const proceed = confirm(
+        "This quotation hasn't been pushed to Salesforce yet — the PDF won't have the official quote number. Download anyway?"
+      );
+      if (!proceed) e.preventDefault();
+    }
+  }
+
   async function pushToSalesforce() {
     setBusy(true);
     setError(null);
@@ -104,8 +113,13 @@ export default function QuoteActions({
     <div>
       {error && <div className="error">{error}</div>}
       <div className="actions">
-        <a className="btn" href={`/api/quotes/${quoteId}/pdf`} target="_blank">
-          Download PDF
+        <a
+          className="btn"
+          href={`/api/quotes/${quoteId}/pdf`}
+          target="_blank"
+          onClick={handlePdfClick}
+        >
+          Preview/Download PDF
         </a>
         {status === "Draft" && (
           <button className="btn" disabled={busy} onClick={markSent}>

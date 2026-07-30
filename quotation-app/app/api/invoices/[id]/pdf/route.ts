@@ -1,9 +1,6 @@
-import { createElement } from "react";
 import { NextRequest, NextResponse } from "next/server";
-import { renderToBuffer } from "@react-pdf/renderer";
 import { createClient } from "@/lib/supabase/server";
-import DocumentPdf from "@/lib/pdf/DocumentPdf";
-import { getSignatureDataUri } from "@/lib/profile/getSignatureDataUri";
+import { getXeroClientForConnection } from "@/lib/xero/client";
 
 export async function GET(
   _req: NextRequest,
@@ -14,9 +11,7 @@ export async function GET(
 
   const { data: invoice, error } = await supabase
     .from("invoices")
-    .select(
-      "*, clients(name, contact_name, contact_email, billing_address), invoice_line_items(*)"
-    )
+    .select("xero_invoice_id, invoice_number")
     .eq("id", id)
     .single();
 
@@ -24,50 +19,25 @@ export async function GET(
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, title, signature_path")
-    .eq("owner_id", invoice.owner_id)
-    .maybeSingle();
-  const signatureDataUri = await getSignatureDataUri(supabase, profile?.signature_path ?? null);
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  if (!invoice.xero_invoice_id) {
+    return NextResponse.json(
+      { error: "Push this invoice to Xero to download its PDF." },
+      { status: 409 }
+    );
+  }
 
-  const lineItems = ((invoice as any).invoice_line_items || []).sort(
-    (a: any, b: any) => a.sort_order - b.sort_order
-  );
+  try {
+    const { xero, tenantId } = await getXeroClientForConnection();
+    const { body } = await xero.accountingApi.getInvoiceAsPdf(tenantId, invoice.xero_invoice_id);
 
-  const resolvedBillingAddress =
-    invoice.billing_address ?? (invoice as any).clients?.billing_address ?? null;
-
-  const buffer = await renderToBuffer(
-    createElement(DocumentPdf, {
-      docType: "INVOICE",
-      docNumber: invoice.invoice_number || invoice.id,
-      docDate: invoice.invoice_date,
-      dueDate: invoice.due_date,
-      reference: invoice.reference,
-      status: invoice.status,
-      client: { ...(invoice as any).clients, billing_address: resolvedBillingAddress },
-      currency: invoice.currency,
-      gstRate: invoice.gst_rate,
-      gstApplicable: invoice.gst_applicable,
-      exchangeRate: invoice.exchange_rate,
-      displayCurrency: invoice.display_currency as "original" | "sgd",
-      lineItems,
-      notes: invoice.notes,
-      preparedBy: profile?.full_name
-        ? { name: profile.full_name, title: profile.title, signatureDataUri }
-        : null,
-      preparedByEmail: user?.email ?? null,
-    }) as Parameters<typeof renderToBuffer>[0]
-  );
-
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${invoice.invoice_number}.pdf"`,
-    },
-  });
+    return new NextResponse(new Uint8Array(body), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="${invoice.invoice_number || invoice.xero_invoice_id}.pdf"`,
+      },
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to fetch the invoice PDF from Xero";
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }

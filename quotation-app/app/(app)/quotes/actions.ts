@@ -26,6 +26,7 @@ export type QuotationInput = {
   billing_address_id?: string | null;
   billing_address?: string | null;
   notes?: string;
+  internal_notes?: string | null;
   valid_until?: string | null;
   title?: string | null;
   line_items: LineItemInput[];
@@ -55,6 +56,7 @@ export async function createQuotation(input: QuotationInput) {
       billing_address_id: input.billing_address_id ?? null,
       billing_address: input.billing_address ?? null,
       notes: input.notes || null,
+      internal_notes: input.internal_notes || null,
       valid_until: validUntil,
       title: input.title || null,
     })
@@ -97,6 +99,7 @@ export async function updateQuotation(id: string, input: QuotationInput) {
       billing_address_id: input.billing_address_id ?? null,
       billing_address: input.billing_address ?? null,
       notes: input.notes || null,
+      internal_notes: input.internal_notes || null,
       valid_until: input.valid_until ?? null,
       title: input.title || null,
     })
@@ -251,6 +254,7 @@ export async function convertQuotationToInvoice(quotationId: string) {
       billing_address_id: quotation.billing_address_id,
       billing_address: quotation.billing_address,
       notes: quotation.notes,
+      internal_notes: quotation.internal_notes,
     })
     .select()
     .single();

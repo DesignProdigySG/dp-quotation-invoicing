@@ -15,7 +15,7 @@ export async function GET(
   const { data: quotation, error } = await supabase
     .from("quotations")
     .select(
-      "*, clients(name, contact_name, contact_email, billing_address), quotation_line_items(*)"
+      "*, clients(name, billing_address), quotation_line_items(*)"
     )
     .eq("id", id)
     .single();
@@ -66,7 +66,7 @@ export async function GET(
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${quotation.quote_number}.pdf"`,
+      "Content-Disposition": `inline; filename="${quotation.quote_number || quotation.id}.pdf"`,
     },
   });
 }

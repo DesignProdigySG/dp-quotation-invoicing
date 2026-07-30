@@ -51,6 +51,7 @@ export default function InvoiceForm({
     billing_address_id: string | null;
     billing_address: string | null;
     notes: string;
+    internal_notes?: string | null;
     line_items: LineItemInput[];
   };
   clients?: ClientOption[];
@@ -79,6 +80,7 @@ export default function InvoiceForm({
     initial?.billing_address ?? clientDefaultBillingAddress ?? ""
   );
   const [notes, setNotes] = useState(initial?.notes || "");
+  const [internalNotes, setInternalNotes] = useState(initial?.internal_notes || "");
   const [lineItems, setLineItems] = useState<LineItemInput[]>(
     initial?.line_items?.length
       ? initial.line_items
@@ -111,6 +113,7 @@ export default function InvoiceForm({
     billingAddressSelection,
     billingAddressText,
     notes,
+    internalNotes,
     lineItems,
     externalQuoteNumber,
   ]);
@@ -207,6 +210,7 @@ export default function InvoiceForm({
           billing_address_id: billingAddressIdValue,
           billing_address: billingAddressText || null,
           notes,
+          internal_notes: internalNotes || null,
           external_quote_status: externalQuoteStatus!,
           external_quote_number: externalQuoteNumber || null,
           line_items: lineItems.filter((li) => li.description.trim() !== ""),
@@ -235,6 +239,7 @@ export default function InvoiceForm({
         billing_address_id: billingAddressIdValue,
         billing_address: billingAddressText || null,
         notes,
+        internal_notes: internalNotes || null,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       });
       setDirty(false);
@@ -497,6 +502,14 @@ export default function InvoiceForm({
 
       <label htmlFor="notes">Notes</label>
       <textarea id="notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
+
+      <label htmlFor="internal_notes">Internal Notes (not shown on the PDF or sent to Xero)</label>
+      <textarea
+        id="internal_notes"
+        rows={3}
+        value={internalNotes}
+        onChange={(e) => setInternalNotes(e.target.value)}
+      />
 
       <div className="actions" style={{ marginTop: 18 }}>
         <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
