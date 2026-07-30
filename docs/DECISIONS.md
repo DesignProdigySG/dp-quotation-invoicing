@@ -1170,3 +1170,34 @@ similar-but-different ones.
   quotation file" retry control) working exactly as before. Lower risk to
   leave inert code than to touch something with real historical data
   behind it.
+
+## Decision 23: Fix small Gmail attachments never reaching the vision extractor
+
+Real-world test: an email with a small image attachment landed in Needs
+Review with a quote whose `notes` explained it saw "no readable item
+details," reasoning only from the subject line — the image never made it
+to Claude at all.
+
+Root cause, confirmed directly from Gmail API's own type docs
+(`node_modules/googleapis/build/src/apis/gmail/v1.d.ts`,
+`Schema$MessagePartBody`): "When present, `attachmentId` contains the ID
+of an external attachment... When not present, the entire content of the
+message part body is contained in the `data` field." `gmailAttachments.ts`'s
+`collectAttachmentParts()` only recognized a part as a candidate when
+`body.attachmentId` was present — Gmail is free to inline a small
+attachment's bytes directly in `body.data` instead (exactly what a small
+test image is likely to get), so that part was silently invisible: never
+collected, never fetched, never sent to the model.
+
+- `CandidateAttachment` gained an `inlineData?: string | null` alongside a
+  now-optional `attachmentId` — mutually exclusive per Gmail's own
+  contract.
+- `collectAttachmentParts()` now accepts a part with an allowed `mimeType`
+  if it has *either* `body.attachmentId` or `body.data`.
+- `fetchAttachmentContentBlocks()`: only calls
+  `gmail.users.messages.attachments.get()` when `attachmentId` is set;
+  otherwise uses `inlineData` directly — no extra API call needed, the
+  bytes are already in hand from the original `format: "full"` fetch.
+- No other files changed — `processSelectedGmailMessages` just calls these
+  two functions and passes the result through, indifferent to which path
+  supplied the bytes.
