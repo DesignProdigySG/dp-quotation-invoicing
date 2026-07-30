@@ -7,6 +7,7 @@ import type { AttachmentContentBlock } from "./gmailAttachments";
 // quotation_line_items much more closely.
 export type ExtractedQuotationDocument = {
   client_name?: string;
+  quote_number?: string;
   currency?: string;
   gst_rate?: number;
   gst_applicable?: boolean;
@@ -16,7 +17,7 @@ export type ExtractedQuotationDocument = {
   notes?: string;
 };
 
-const SYSTEM_PROMPT = `You extract structured data from a quotation document (an image or PDF) that was built OUTSIDE this system, so its details can be imported here. Unlike a quote request, this document already has prices. Reply with ONLY a single JSON object matching this exact schema, no markdown fences, no commentary: { "client_name"?: string, "currency"?: string (ISO 4217 code, e.g. "SGD", "USD"), "gst_rate"?: number (percentage, e.g. 9 for 9%), "gst_applicable"?: boolean, "quote_date"?: string ("YYYY-MM-DD"), "valid_until"?: string ("YYYY-MM-DD"), "line_items": [{ "description": string, "quantity": number, "unit_price": number }], "notes"?: string }. Quantities and unit prices must be plain numbers, no currency symbols or thousands separators. If GST/tax isn't mentioned anywhere on the document, omit gst_rate and set gst_applicable to false. Omit any other field that isn't visible on the document rather than guessing.`;
+const SYSTEM_PROMPT = `You extract structured data from a quotation document (an image or PDF) that was built OUTSIDE this system, so its details can be imported here. Unlike a quote request, this document already has prices. Reply with ONLY a single JSON object matching this exact schema, no markdown fences, no commentary: { "client_name"?: string, "quote_number"?: string (the document's own quotation/reference number, exactly as written), "currency"?: string (ISO 4217 code, e.g. "SGD", "USD"), "gst_rate"?: number (percentage, e.g. 9 for 9%), "gst_applicable"?: boolean, "quote_date"?: string ("YYYY-MM-DD"), "valid_until"?: string ("YYYY-MM-DD"), "line_items": [{ "description": string, "quantity": number, "unit_price": number }], "notes"?: string }. Quantities and unit prices must be plain numbers, no currency symbols or thousands separators. If GST/tax isn't mentioned anywhere on the document, omit gst_rate and set gst_applicable to false. Omit any other field that isn't visible on the document rather than guessing.`;
 
 export async function extractQuotationFromDocument(
   attachment: AttachmentContentBlock

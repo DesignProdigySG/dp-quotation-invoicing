@@ -405,6 +405,7 @@ export type Database = {
           currency: string
           display_currency: string
           exchange_rate: number | null
+          external_quote_file_path: string | null
           gst_applicable: boolean
           gst_rate: number
           id: string
@@ -431,6 +432,7 @@ export type Database = {
           currency?: string
           display_currency?: string
           exchange_rate?: number | null
+          external_quote_file_path?: string | null
           gst_applicable?: boolean
           gst_rate?: number
           id?: string
@@ -457,6 +459,7 @@ export type Database = {
           currency?: string
           display_currency?: string
           exchange_rate?: number | null
+          external_quote_file_path?: string | null
           gst_applicable?: boolean
           gst_rate?: number
           id?: string

@@ -58,6 +58,7 @@ export default function ImportQuoteForm({
         <QuoteForm
           clients={clients}
           billingAddresses={billingAddresses}
+          sourceFilePath={extracted.source_file_path}
           initial={{
             client_id: extracted.suggested_client_id || clients[0]?.id || "",
             quote_date: extracted.quote_date || new Date().toISOString().slice(0, 10),
@@ -68,6 +69,7 @@ export default function ImportQuoteForm({
             notes: extracted.notes || "",
             valid_until: extracted.valid_until || null,
             title: extracted.client_name ? `Imported — ${extracted.client_name}` : null,
+            quote_number: extracted.quote_number || null,
             line_items: extracted.line_items,
           }}
         />

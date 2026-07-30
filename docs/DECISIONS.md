@@ -1114,3 +1114,59 @@ together since the first two share one root cause:
   mode (`ImportQuoteForm.tsx`) so the user reviews and explicitly saves,
   same human-in-the-loop pattern used everywhere else in this app (nothing
   is ever auto-created from an AI extraction without a save click).
+
+## Decision 22: Externally-sourced quotations replace the invoice "external quote" flow
+
+Realized once `/quotes/import` existed (Decision 21) that the "New Invoice"
+→ "Was a quotation for this invoice generated outside the app?" → "Yes"
+flow (Decision 13) was the wrong shape: it only asked for a quote number
+and stored the uploaded file as an inert attachment, with every invoice
+line item still typed by hand. Confirmed with the user directly: "Yes"
+should instead scan the uploaded document into a real quotation (client,
+line items, quote number, original file), which then goes through the
+normal "Convert to invoice" button — one consistent path, not two
+similar-but-different ones.
+
+- **New `quotations.external_quote_file_path`** (nullable text) — mirrors
+  `invoices.external_quote_file_path`'s naming/shape (Decision 13). Its
+  mere presence *is* the "externally-sourced, scanned quotation" signal,
+  no separate boolean column, same convention as `invoices.quotation_id`
+  presence already meaning "came from a conversion."
+- **`extractQuotationFromDocument` gained an optional `quote_number`** —
+  the source document's own reference number becomes this quotation's
+  number; there's no Salesforce push involved for this kind of quotation
+  at all.
+- **`extractQuotationFromUpload` now also uploads the file** to the
+  existing private `external-quotes` bucket (same path convention as
+  `uploadExternalQuoteFile`) and returns the path — the original document
+  is kept on record, not discarded after extraction.
+- **`pushQuotationToSalesforce` rejects outright** if
+  `external_quote_file_path` is set (defense in depth — the button is also
+  hidden). This kind of quotation has no real SFDC-driven number and isn't
+  a normal sales-pipeline quote.
+- **The quote PDF route redirects to the original file** (a signed URL
+  from the `external-quotes` bucket) instead of self-rendering via
+  `DocumentPdf` when `external_quote_file_path` is set — the real document
+  already exists, re-typing a guess at it would be worse, not better.
+- **`QuoteForm.tsx` gained an editable "Quotation number" field**, shown
+  only when an external quote file is present (create, via a new
+  `sourceFilePath` prop from `ImportQuoteForm`, or edit, via
+  `initial.external_quote_file_path`) — otherwise `quote_number` stays
+  exactly as before: never user-editable, Salesforce push is its sole
+  writer (Decision 17).
+- **The Decision-19 "not pushed to Salesforce yet" PDF confirm dialog is
+  suppressed** for these quotations too — it would otherwise fire on every
+  single one, since `salesforceQuoteId` is never set for this kind.
+- **`NewInvoiceButton.tsx`'s "Yes" now navigates to `/quotes/import`**
+  instead of `/invoices/new?externalQuote=yes`. Deliberately **not**
+  auto-chaining straight to an invoice after saving — the user lands on
+  the new quotation and clicks "Convert to invoice" themselves, keeping a
+  human review step between "here's what got scanned" and "this is now a
+  real invoice," consistent with every other AI-extraction flow in this
+  app.
+- **The old `externalQuote=yes` code path is left in place, not deleted**
+  — unreachable from the UI now, but stays schema-compatible and keeps any
+  already-created invoices' detail-page display (and their "Attach
+  quotation file" retry control) working exactly as before. Lower risk to
+  leave inert code than to touch something with real historical data
+  behind it.

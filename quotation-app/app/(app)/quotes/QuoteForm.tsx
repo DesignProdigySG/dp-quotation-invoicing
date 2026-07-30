@@ -26,6 +26,7 @@ export default function QuoteForm({
   clients,
   billingAddresses,
   initial,
+  sourceFilePath,
 }: {
   quoteId?: string;
   clients: ClientOption[];
@@ -44,8 +45,15 @@ export default function QuoteForm({
     internal_notes?: string | null;
     valid_until?: string | null;
     title?: string | null;
+    quote_number?: string | null;
+    external_quote_file_path?: string | null;
     line_items: LineItemInput[];
   };
+  // Only set when creating a quotation imported from an externally-built
+  // document (see ImportQuoteForm.tsx) — carries the just-uploaded file's
+  // storage path through to createQuotation. Normal create/edit never pass
+  // this; on edit, the existing path comes from initial instead.
+  sourceFilePath?: string | null;
 }) {
   const router = useRouter();
   const [clientId, setClientId] = useState(initial?.client_id || clients[0]?.id || "");
@@ -75,6 +83,8 @@ export default function QuoteForm({
   );
   const [notes, setNotes] = useState(initial?.notes || "");
   const [internalNotes, setInternalNotes] = useState(initial?.internal_notes || "");
+  const [quoteNumber, setQuoteNumber] = useState(initial?.quote_number || "");
+  const effectiveSourceFilePath = sourceFilePath ?? initial?.external_quote_file_path ?? null;
   const [title, setTitle] = useState(initial?.title || "");
   const [validUntil, setValidUntil] = useState(initial?.valid_until || "");
   const [billingAddressSelection, setBillingAddressSelection] = useState(
@@ -167,6 +177,8 @@ export default function QuoteForm({
         internal_notes: internalNotes || null,
         valid_until: validUntil || null,
         title: title || null,
+        quote_number: quoteNumber || null,
+        external_quote_file_path: effectiveSourceFilePath,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       };
       if (quoteId) {
@@ -422,6 +434,18 @@ export default function QuoteForm({
         value={internalNotes}
         onChange={(e) => setInternalNotes(e.target.value)}
       />
+
+      {effectiveSourceFilePath && (
+        <>
+          <label htmlFor="quote_number">Quotation number</label>
+          <input
+            id="quote_number"
+            value={quoteNumber}
+            onChange={(e) => setQuoteNumber(e.target.value)}
+            placeholder="From the original document"
+          />
+        </>
+      )}
 
       <div className="actions" style={{ marginTop: 18 }}>
         <button className="btn btn-primary" disabled={saving} onClick={handleSave}>

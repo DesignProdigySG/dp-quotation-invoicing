@@ -24,6 +24,19 @@ export async function GET(
     return NextResponse.json({ error: "Quotation not found" }, { status: 404 });
   }
 
+  // Externally-sourced quotation (imported from a document built outside
+  // the app) — serve the original file instead of a self-rendered PDF,
+  // which would just be a re-typed guess at a document we already have.
+  if (quotation.external_quote_file_path) {
+    const { data: signed } = await supabase.storage
+      .from("external-quotes")
+      .createSignedUrl(quotation.external_quote_file_path, 60);
+    if (!signed?.signedUrl) {
+      return NextResponse.json({ error: "Could not load the original file" }, { status: 500 });
+    }
+    return NextResponse.redirect(signed.signedUrl);
+  }
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, title, signature_path")
