@@ -15,7 +15,7 @@ export async function GET(
   const { data: quotation, error } = await supabase
     .from("quotations")
     .select(
-      "*, clients(name, contact_name, contact_email, billing_address), quotation_line_items(*)"
+      "*, clients(name, billing_address), quotation_line_items(*)"
     )
     .eq("id", id)
     .single();

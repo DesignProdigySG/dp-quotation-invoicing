@@ -20,6 +20,7 @@ export type InvoiceInput = {
   billing_address_id?: string | null;
   billing_address?: string | null;
   notes?: string;
+  internal_notes?: string | null;
   line_items: LineItemInput[];
 };
 
@@ -35,6 +36,7 @@ export type CreateInvoiceInput = {
   billing_address_id?: string | null;
   billing_address?: string | null;
   notes?: string;
+  internal_notes?: string | null;
   external_quote_status: "has_external_quote" | "no_quote";
   external_quote_number?: string | null;
   line_items: LineItemInput[];
@@ -66,6 +68,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
       billing_address_id: input.billing_address_id ?? null,
       billing_address: input.billing_address ?? null,
       notes: input.notes || null,
+      internal_notes: input.internal_notes || null,
       external_quote_status: input.external_quote_status,
       external_quote_number: input.external_quote_number || null,
     })
@@ -155,6 +158,7 @@ export async function updateInvoice(id: string, input: InvoiceInput) {
       billing_address_id: input.billing_address_id ?? null,
       billing_address: input.billing_address ?? null,
       notes: input.notes || null,
+      internal_notes: input.internal_notes || null,
     })
     .eq("id", id);
   if (error) throw new Error(error.message);

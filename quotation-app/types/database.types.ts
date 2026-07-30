@@ -232,6 +232,7 @@ export type Database = {
           gst_applicable: boolean
           gst_rate: number
           id: string
+          internal_notes: string | null
           invoice_date: string
           invoice_number: string | null
           notes: string | null
@@ -261,6 +262,7 @@ export type Database = {
           gst_applicable?: boolean
           gst_rate?: number
           id?: string
+          internal_notes?: string | null
           invoice_date?: string
           invoice_number?: string | null
           notes?: string | null
@@ -290,6 +292,7 @@ export type Database = {
           gst_applicable?: boolean
           gst_rate?: number
           id?: string
+          internal_notes?: string | null
           invoice_date?: string
           invoice_number?: string | null
           notes?: string | null
@@ -405,6 +408,7 @@ export type Database = {
           gst_applicable: boolean
           gst_rate: number
           id: string
+          internal_notes: string | null
           notes: string | null
           owner_id: string
           quote_date: string
@@ -430,6 +434,7 @@ export type Database = {
           gst_applicable?: boolean
           gst_rate?: number
           id?: string
+          internal_notes?: string | null
           notes?: string | null
           owner_id: string
           quote_date?: string
@@ -455,6 +460,7 @@ export type Database = {
           gst_applicable?: boolean
           gst_rate?: number
           id?: string
+          internal_notes?: string | null
           notes?: string | null
           owner_id?: string
           quote_date?: string

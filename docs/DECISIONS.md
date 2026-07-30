@@ -1027,3 +1027,37 @@ functioned as an in-tab preview rather than a forced download.
   to raw `quotation.quote_number` (`null` before a push, producing a
   `"null.pdf"`-ish filename); now uses the same `quote_number || id`
   fallback already used for the in-document `docNumber`.
+
+## Decision 20: Internal notes, hide contact info on quote PDFs, invoice PDFs from Xero
+
+Three follow-up asks from the same conversation as Decision 19:
+
+- **Internal notes**: a new `internal_notes` column (nullable text) on both
+  `quotations` and `invoices`, distinct from the existing client-facing
+  `notes` field. Wired through `createQuotation`/`updateQuotation`/
+  `createInvoice`/`updateInvoice`, a second textarea in `QuoteForm.tsx`/
+  `InvoiceForm.tsx` labeled "Internal Notes (not shown on the PDF...)", and
+  carried over in `convertQuotationToInvoice` alongside the existing
+  `notes` carry-over. Deliberately **not** wired into `DocumentPdf` or the
+  Xero invoice payload builder — that omission is the entire point.
+- **Hide contact name/email on quotation PDFs**: `app/api/quotes/[id]/pdf/route.ts`'s
+  `clients(...)` select trimmed to `name, billing_address` — `DocumentPdf`
+  already guards both fields with `client.contact_name &&`/
+  `client.contact_email &&`, so simply not fetching them is enough, no
+  template change needed. Scoped to quotations only, per the user — billing
+  address is the intended place for that detail if needed at all.
+- **Invoice PDFs now come from Xero, not self-rendered**: realized
+  mid-conversation that since invoices are pushed to Xero as the system of
+  record, "Download PDF" should fetch Xero's own generated PDF rather than
+  re-rendering one via `DocumentPdf`/`@react-pdf/renderer` — and should
+  only be available once actually pushed (`xero_invoice_id` set), unlike
+  quotations, since an unpushed invoice isn't a real invoice yet (no
+  "preview before push" case worth supporting here). `app/api/invoices/[id]/pdf/route.ts`
+  rewritten to call `xero.accountingApi.getInvoiceAsPdf(tenantId, xero_invoice_id)`
+  (existing `xero-node` SDK method, confirmed directly in
+  `node_modules/xero-node/dist/gen/api/accountingApi.d.ts`, reusing the
+  existing `getXeroClientForConnection()`) and return a 409 if not yet
+  pushed; `InvoiceActions.tsx`'s "Download PDF" is now a disabled button
+  with a tooltip until `xeroInvoiceId` is set. `DocumentPdf.tsx` itself is
+  left untouched (still shared with quotes) — only the invoice route
+  stopped calling it.

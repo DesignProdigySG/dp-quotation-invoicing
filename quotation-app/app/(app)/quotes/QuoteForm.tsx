@@ -41,6 +41,7 @@ export default function QuoteForm({
     billing_address_id?: string | null;
     billing_address?: string | null;
     notes: string;
+    internal_notes?: string | null;
     valid_until?: string | null;
     title?: string | null;
     line_items: LineItemInput[];
@@ -73,6 +74,7 @@ export default function QuoteForm({
       "original"
   );
   const [notes, setNotes] = useState(initial?.notes || "");
+  const [internalNotes, setInternalNotes] = useState(initial?.internal_notes || "");
   const [title, setTitle] = useState(initial?.title || "");
   const [validUntil, setValidUntil] = useState(initial?.valid_until || "");
   const [billingAddressSelection, setBillingAddressSelection] = useState(
@@ -162,6 +164,7 @@ export default function QuoteForm({
           : billingAddressSelection,
         billing_address: billingAddressText || null,
         notes,
+        internal_notes: internalNotes || null,
         valid_until: validUntil || null,
         title: title || null,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
@@ -410,6 +413,14 @@ export default function QuoteForm({
         rows={3}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
+      />
+
+      <label htmlFor="internal_notes">Internal Notes (not shown on the PDF)</label>
+      <textarea
+        id="internal_notes"
+        rows={3}
+        value={internalNotes}
+        onChange={(e) => setInternalNotes(e.target.value)}
       />
 
       <div className="actions" style={{ marginTop: 18 }}>

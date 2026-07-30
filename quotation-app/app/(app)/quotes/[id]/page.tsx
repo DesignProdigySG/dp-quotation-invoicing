@@ -93,6 +93,7 @@ export default async function QuoteDetailPage({
           billing_address_id: quotation.billing_address_id,
           billing_address: quotation.billing_address,
           notes: quotation.notes || "",
+          internal_notes: quotation.internal_notes,
           valid_until: quotation.valid_until,
           title: quotation.title,
           line_items: lineItems,

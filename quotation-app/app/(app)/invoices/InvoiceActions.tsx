@@ -147,9 +147,19 @@ export default function InvoiceActions({
     <div>
       {error && <div className="error">{error}</div>}
       <div className="actions">
-        <a className="btn" href={`/api/invoices/${invoiceId}/pdf`} target="_blank">
-          Download PDF
-        </a>
+        {xeroInvoiceId ? (
+          <a className="btn" href={`/api/invoices/${invoiceId}/pdf`} target="_blank">
+            Download PDF
+          </a>
+        ) : (
+          <button
+            className="btn"
+            disabled
+            title="Push to Xero to download the invoice PDF."
+          >
+            Download PDF
+          </button>
+        )}
         {status === "Draft" && (
           <button className="btn" disabled={busy} onClick={markSent}>
             Mark as sent
