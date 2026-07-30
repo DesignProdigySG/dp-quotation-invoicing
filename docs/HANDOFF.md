@@ -121,6 +121,18 @@ that field is set, per the original reference material's
 `{{SalesforceQuoteNo}}` placeholder intent (Salesforce as the source of truth
 for quote numbers rather than the freeform `quote_number` text field).
 
+**New direction, exploratory only — read before building anything here:**
+`docs/POOLS_AND_DRAWS_DESIGN.md` — a design discussion (not a spec, not built) for
+tracking the *other* side of money: incoming payments split into per-user "pools"
+(partner budgets, media budgets) and outgoing "draws" (vendor reimbursement
+claims) against them. Converged on relational tables (not a graph database, see
+the doc for why), an effective-dated vendor→pool assignment table, and an
+AI-driven drift-detection idea — but real open questions remain (see the doc's
+"What's genuinely still open" section) and the person who scoped this said
+outright they don't know the best way to tackle it yet. Also flags the same
+"Supabase MCP pointed at the wrong project" blocker noted below — check that's
+resolved before attempting any of this.
+
 **Fast-follows on the Xero v1 cuts, not yet prioritized:**
 - Multi-currency Xero push (v1 is SGD-only — see Decision 5 for why).
 - Two-way sync: pulling payment status back from Xero into this app's own
