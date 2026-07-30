@@ -957,3 +957,73 @@ Follow-ups after the first successful live push:
   scoped properly as its own follow-up later.
 - Still on the same unmerged branch/preview deployment — not merged to
   `main`.
+
+## Decision 18: Live-debugged fixes to Decisions 16/17, then merged to `main`
+
+Real-world use surfaced two more field mismatches and a delete-sync gap, all
+confirmed directly against the live Salesforce org and production errors
+rather than guessed:
+
+- **Cross-sell Opportunity field label correction**: Decision 16's fix used
+  the label `"Cross-sell Opportunity"`; the user checked Salesforce's Object
+  Manager directly and confirmed the real label has a trailing `?` —
+  `"Cross-sell Opportunity?"`. `findOpportunityFieldByLabel` match string
+  updated accordingly.
+- **Quote number field correction**: Decision 17 read Salesforce's standard
+  `QuoteNumber` autonumber field (`0000XXXX` format), but the org's actual
+  quote numbering lives in a custom field, `Custom_quote_number__c` (labeled
+  "Quotation Number" in Setup, `Q-2...` format) — the one visible in the
+  Salesforce UI. `pushQuotationToSalesforce` now retrieves and stores that
+  field instead.
+- **Delete-sync**: deleting a quotation in-app now also deletes its linked
+  Salesforce Opportunity (optional per the user, but feasible so it was
+  built). Took three rounds of live debugging against real user-hit errors:
+  1. `conn.sobject("Opportunity").destroy()` had no try/catch — any failure
+     crashed unhandled.
+  2. jsforce's failure can be a thrown exception with a **lowercase,
+     space-separated** message (e.g. `"entity is deleted"`) rather than
+     only a structured `SaveResult.errors[0].errorCode` (e.g.
+     `ENTITY_IS_DELETED`) — both paths are now normalized and checked so an
+     Opportunity already deleted manually in Salesforce doesn't block the
+     in-app delete.
+  3. A genuine Postgres FK violation: `unmatched_email_quotes.resolved_quotation_id`
+     and `unmatched_email_pos.suggested_quotation_id` both default to
+     `NO ACTION` (unlike `quotation_line_items.quotation_id`'s `CASCADE` or
+     `invoices.quotation_id`'s `SET NULL`, confirmed via a direct
+     `information_schema` query) — `deleteQuotation` now nulls both out
+     before deleting the quotation, preserving the historical intake
+     records rather than blocking the delete.
+  - **`deleteQuotation` converted to the never-throw `{error?}` convention**
+    (matching `pushQuotationToSalesforce` and the Settings actions) — this
+    was necessary, not optional polish: a thrown Server Action error is
+    redacted to a generic message in production, which is why the same
+    unhelpful error kept reappearing across debugging rounds even though
+    the underlying causes were different each time.
+- **Merged to `main`** (PR #25, merge commit `0456127`) once confirmed
+  working end-to-end on the live preview. `docs/DECISIONS.md` conflict
+  resolved by renumbering (this file); `types/database.types.ts` conflict
+  resolved by regenerating fresh from the live schema, since Supabase
+  migrations aren't git-branch-scoped and the live DB already reflected both
+  branches' columns.
+
+## Decision 19: PDF preview/download nudge instead of hard gating
+
+`docs/HANDOFF.md`'s next-priority item asked for gating "Download PDF"
+until a quotation has a real Salesforce quote number. Hard gating (blocking
+the route, disabling the button) was considered and rejected by the user —
+people legitimately want to preview a PDF before pushing to Salesforce, and
+the PDF route already serves `Content-Disposition: inline`, so it's always
+functioned as an in-tab preview rather than a forced download.
+
+- Button relabeled from "Download PDF" to **"Preview/Download PDF"** to
+  reflect what it's actually always done.
+- If the quotation hasn't been pushed yet (`!salesforceQuoteId`), clicking
+  shows a `confirm()` dialog warning the PDF won't have the official
+  Salesforce-sourced quote number, with an option to cancel; once pushed,
+  no dialog at all.
+- No server-side gating added to `app/api/quotes/[id]/pdf/route.ts` — kept
+  deliberately simple (nudge, not enforcement) per the user's call. Fixed
+  one small independent bug while in that file: the PDF filename fell back
+  to raw `quotation.quote_number` (`null` before a push, producing a
+  `"null.pdf"`-ish filename); now uses the same `quote_number || id`
+  fallback already used for the in-document `docNumber`.
