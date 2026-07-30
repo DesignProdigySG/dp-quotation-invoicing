@@ -75,6 +75,7 @@ export default async function QuoteDetailPage({
           salesforceQuoteId={quotation.salesforce_quote_id}
           salesforceQuoteNumber={quotation.salesforce_quote_number}
           salesforcePushError={quotation.salesforce_push_error}
+          sourceFilePath={quotation.external_quote_file_path}
         />
       </div>
 
@@ -96,6 +97,8 @@ export default async function QuoteDetailPage({
           internal_notes: quotation.internal_notes,
           valid_until: quotation.valid_until,
           title: quotation.title,
+          quote_number: quotation.quote_number,
+          external_quote_file_path: quotation.external_quote_file_path,
           line_items: lineItems,
         }}
       />

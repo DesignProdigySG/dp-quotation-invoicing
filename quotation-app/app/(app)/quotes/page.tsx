@@ -24,9 +24,14 @@ export default async function QuotesPage() {
           <h1>Quotations</h1>
           <p className="subtitle">Create a quote, then send it or convert it to an invoice.</p>
         </div>
-        <Link className="btn btn-primary" href="/quotes/new">
-          + New quotation
-        </Link>
+        <div className="actions">
+          <Link className="btn" href="/quotes/import">
+            Import from file
+          </Link>
+          <Link className="btn btn-primary" href="/quotes/new">
+            + New quotation
+          </Link>
+        </div>
       </div>
 
       <div className="card">

@@ -405,6 +405,7 @@ export type Database = {
           currency: string
           display_currency: string
           exchange_rate: number | null
+          external_quote_file_path: string | null
           gst_applicable: boolean
           gst_rate: number
           id: string
@@ -431,6 +432,7 @@ export type Database = {
           currency?: string
           display_currency?: string
           exchange_rate?: number | null
+          external_quote_file_path?: string | null
           gst_applicable?: boolean
           gst_rate?: number
           id?: string
@@ -457,6 +459,7 @@ export type Database = {
           currency?: string
           display_currency?: string
           exchange_rate?: number | null
+          external_quote_file_path?: string | null
           gst_applicable?: boolean
           gst_rate?: number
           id?: string
@@ -605,6 +608,7 @@ export type Database = {
       unmatched_email_quotes: {
         Row: {
           created_at: string
+          gmail_message_id: string | null
           id: string
           owner_id: string
           parsed_data: Json
@@ -619,6 +623,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          gmail_message_id?: string | null
           id?: string
           owner_id: string
           parsed_data: Json
@@ -633,6 +638,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          gmail_message_id?: string | null
           id?: string
           owner_id?: string
           parsed_data?: Json

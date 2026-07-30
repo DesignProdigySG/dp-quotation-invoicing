@@ -9,6 +9,13 @@ export default function NewInvoiceButton() {
 
   function choose(externalQuote: "yes" | "no") {
     setOpen(false);
+    if (externalQuote === "yes") {
+      // Scan the external quotation into a real quotation record instead of
+      // typing its number/line items by hand — convert to an invoice from
+      // there via the normal "Convert to invoice" button.
+      router.push("/quotes/import");
+      return;
+    }
     router.push(`/invoices/new?externalQuote=${externalQuote}`);
   }
 
