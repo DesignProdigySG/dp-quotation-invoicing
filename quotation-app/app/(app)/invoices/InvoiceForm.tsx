@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateInvoice, createInvoice, uploadExternalQuoteFile } from "./actions";
-import { formatMoney, computeTotals } from "@/lib/format";
+import { formatMoney, computeTotals, addDaysToDateString } from "@/lib/format";
 import type { LineItemInput } from "../quotes/actions";
 import { useFormDirty } from "@/lib/forms/FormDirtyContext";
 
@@ -14,9 +14,15 @@ type ClientOption = {
   name: string;
   default_currency: string;
   default_gst_rate: number;
+  default_payment_terms_days: number | null;
   display_currency_preference: string;
   billing_address: string | null;
 };
+
+function dueDateForClient(c?: ClientOption): string {
+  if (!c?.default_payment_terms_days) return "";
+  return addDaysToDateString(new Date().toISOString().slice(0, 10), c.default_payment_terms_days);
+}
 
 const ALLOWED_EXTERNAL_QUOTE_TYPES = [
   "image/png",
@@ -64,7 +70,7 @@ export default function InvoiceForm({
   const [currency, setCurrency] = useState(initialCurrency);
   const [gstRate, setGstRate] = useState(initialGstRate);
   const [gstApplicable, setGstApplicable] = useState(initialGstApplicable);
-  const [dueDate, setDueDate] = useState(initial?.due_date || "");
+  const [dueDate, setDueDate] = useState(initial?.due_date || dueDateForClient(clients?.[0]));
   const [reference, setReference] = useState(initial?.reference || "");
   const [warningDismissed, setWarningDismissed] = useState(false);
   const [exchangeRate, setExchangeRate] = useState<number | "">(
@@ -127,6 +133,7 @@ export default function InvoiceForm({
       setDisplayCurrency((c.display_currency_preference as "original" | "sgd") || "original");
       setBillingAddressSelection("__default__");
       setBillingAddressText(c.billing_address || "");
+      setDueDate(dueDateForClient(c));
     }
   }
 

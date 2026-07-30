@@ -1201,3 +1201,29 @@ collected, never fetched, never sent to the model.
 - No other files changed — `processSelectedGmailMessages` just calls these
   two functions and passes the result through, indifferent to which path
   supplied the bytes.
+
+## Decision 24: Client default payment terms drive invoice due-date defaulting
+
+Clients often have a standard payment term (e.g. "net 30"), and the "Due
+date" field on an invoice was always blank by default, requiring manual
+entry every time. Added a nullable `clients.default_payment_terms_days`
+column and used it to pre-fill "Due date" wherever an invoice is created.
+
+- `ClientForm.tsx`: new "Default payment terms (days)" number field next
+  to Default GST %, nullable (blank means no default).
+- `InvoiceForm.tsx` (manual "New invoice" flow): when the client dropdown
+  changes (or on initial load, since the first client is pre-selected),
+  "Due date" is set to today + that client's `default_payment_terms_days`
+  via the existing `addDaysToDateString` helper — unconditionally
+  overwritten on client change, same convention already used there for
+  currency/GST rate/billing address. A client with no payment terms set
+  clears the field back to blank. The user can still edit the date by hand
+  afterward; it's a normal controlled input.
+- `convertQuotationToInvoice` (`quotes/actions.ts`): now joins
+  `clients(default_payment_terms_days)` and sets the new invoice's
+  `due_date` to the quotation's own `quote_date` plus that many days (same
+  "base date + N days" pattern already used for `valid_until` in
+  `createQuotation`), or `null` if the client has no payment terms set.
+- No changes needed in `invoices/actions.ts`'s `createInvoice` — it already
+  takes `due_date` verbatim from the form, which now simply arrives
+  pre-filled.

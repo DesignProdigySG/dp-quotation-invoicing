@@ -251,11 +251,18 @@ export async function convertQuotationToInvoice(quotationId: string) {
 
   const { data: quotation, error: qError } = await supabase
     .from("quotations")
-    .select("*, quotation_line_items(*)")
+    .select("*, quotation_line_items(*), clients(default_payment_terms_days)")
     .eq("id", quotationId)
     .single();
 
   if (qError || !quotation) throw new Error(qError?.message || "Quote not found");
+
+  const client = (quotation as any).clients as {
+    default_payment_terms_days: number | null;
+  } | null;
+  const dueDate = client?.default_payment_terms_days
+    ? addDaysToDateString(quotation.quote_date, client.default_payment_terms_days)
+    : null;
 
   const { data: invoice, error: invError } = await supabase
     .from("invoices")
@@ -272,6 +279,7 @@ export async function convertQuotationToInvoice(quotationId: string) {
       billing_address: quotation.billing_address,
       notes: quotation.notes,
       internal_notes: quotation.internal_notes,
+      due_date: dueDate,
     })
     .select()
     .single();
