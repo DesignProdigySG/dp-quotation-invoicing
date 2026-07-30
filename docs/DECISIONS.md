@@ -1061,3 +1061,56 @@ Three follow-up asks from the same conversation as Decision 19:
   with a tooltip until `xeroInvoiceId` is set. `DocumentPdf.tsx` itself is
   left untouched (still shared with quotes) — only the invoice route
   stopped calling it.
+
+## Decision 21: Vision/attachment extraction, multi-quote emails, and manual quotation-document import
+
+Scoped to the quote-request pipeline only (not the PO pipeline, which is a
+structural duplicate and can get the same treatment later without a
+redesign — confirmed explicitly with the user). Three pieces, designed
+together since the first two share one root cause:
+
+- **Attachment vision extraction**: Gmail's `format: "full"` fetch (already
+  used by `processSelectedGmailMessages`) already returns each attachment
+  part's `mimeType`/`filename`/`attachmentId` — it was simply discarded by
+  `decodeBody()`'s text-only walk. New `lib/email-quote/gmailAttachments.ts`
+  walks the MIME tree for allowed types (matching the existing
+  `uploadExternalQuoteFile` allow-list: PNG/JPG/GIF/WEBP/PDF, capped at 3
+  attachments and 10MB each), then fetches bytes via
+  `gmail.users.messages.attachments.get()` — a new call, but one already
+  covered by the existing `gmail.readonly` OAuth scope, no reconnect
+  needed — and converts them into Anthropic `image`/`document` content
+  blocks (base64url → base64 re-encoding, same conversion `decodeBody()`
+  already does for text parts).
+- **Multi-quote-per-email**: `extractQuoteFromEmail`/
+  `extractQuoteWithClientContext` now return `ExtractedQuoteRequest[]`
+  instead of a single object — the prompt asks the model to identify every
+  distinct quote request in the email body *and* any attachments (e.g.
+  several unrelated screenshots), rather than assuming exactly one.
+  `processSelectedGmailMessages`'s per-message loop now inserts one
+  `unmatched_email_quotes` row per array entry instead of one per message.
+  **No change was needed in `ReviewQueue.tsx`** — it already maps rows to
+  cards generically, so N rows from one email just show as N cards. A new
+  nullable `gmail_message_id` column was added to `unmatched_email_quotes`
+  (stamped on every row from a given message) purely for traceability,
+  since nothing tied multiple rows back to one source email before.
+- **Model choice**: text-only extraction keeps the existing
+  `claude-haiku-4-5-20251001`; when attachments are present, both
+  extractors switch to `claude-sonnet-5` (vision accuracy matters enough to
+  justify it, matching the same reasoning Decision 8 already used for
+  `extractQuoteWithClientContext`'s Haiku→Sonnet tier) — `temperature` is
+  omitted on the Sonnet path since that model rejects an explicit override,
+  same known constraint as `extractQuoteWithClientContext`.
+- **Manual quotation-document import** (a separate flow, not Gmail-based):
+  a new `/quotes/import` page lets someone upload a PDF/image of a
+  quotation built outside the app. New `extractQuotationFromDocument`
+  (`lib/email-quote/`) uses its own schema/prompt — deliberately not reusing
+  the quote-*request* extractor, since this document is already priced
+  (line items carry `unit_price`, not just quantity) and can carry
+  currency/GST/dates. New `extractQuotationFromUpload` server action
+  (`quotes/actions.ts`) validates the file (same allow-list/size cap as
+  above), extracts it, and does a simple case-insensitive exact-name match
+  against existing clients to suggest one — nothing is written to the
+  database at this step. The extracted data prefills `QuoteForm` in create
+  mode (`ImportQuoteForm.tsx`) so the user reviews and explicitly saves,
+  same human-in-the-loop pattern used everywhere else in this app (nothing
+  is ever auto-created from an AI extraction without a save click).

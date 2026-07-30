@@ -8,6 +8,11 @@ import { getSalesforceClientForConnection } from "@/lib/salesforce/client";
 import { findOrCreateSalesforceAccount } from "@/lib/salesforce/accounts";
 import { findOpportunityFieldByLabel } from "@/lib/salesforce/opportunityFields";
 import { generateQuotationTitle } from "@/lib/salesforce/generateQuotationTitle";
+import {
+  extractQuotationFromDocument,
+  type ExtractedQuotationDocument,
+} from "@/lib/email-quote/extractQuotationFromDocument";
+import type { AttachmentContentBlock } from "@/lib/email-quote/gmailAttachments";
 
 export type LineItemInput = {
   description: string;
@@ -459,5 +464,69 @@ export async function pushQuotationToSalesforce(
     return {};
   } catch (e) {
     return await recordFailure(e instanceof Error ? e.message : "Failed to push to Salesforce");
+  }
+}
+
+const ALLOWED_IMPORT_FILE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+];
+const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+
+export type ExtractedQuotationForImport = ExtractedQuotationDocument & {
+  suggested_client_id: string | null;
+};
+
+// Never throws — same convention as the other Settings/quote actions.
+// Extracts a priced quotation document (built outside this app) into a
+// prefill for the "new quotation" form. Nothing is written to the database
+// here — the user still reviews and explicitly saves via the normal
+// createQuotation path, same as every other quotation creation route.
+export async function extractQuotationFromUpload(
+  formData: FormData
+): Promise<{ error?: string; data?: ExtractedQuotationForImport }> {
+  try {
+    const file = formData.get("file");
+    if (!(file instanceof File)) return { error: "No file provided" };
+    if (!ALLOWED_IMPORT_FILE_TYPES.includes(file.type)) {
+      return { error: "The file must be a PNG, JPG, GIF, WEBP, or PDF" };
+    }
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      return { error: "The file must be under 10MB" };
+    }
+
+    const bytes = Buffer.from(await file.arrayBuffer()).toString("base64");
+    const attachment: AttachmentContentBlock =
+      file.type === "application/pdf"
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: bytes } }
+        : {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: file.type as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: bytes,
+            },
+          };
+
+    const extracted = await extractQuotationFromDocument(attachment);
+    if (!extracted) {
+      return { error: "Could not extract a quotation from this file — try a clearer copy." };
+    }
+
+    let suggestedClientId: string | null = null;
+    if (extracted.client_name) {
+      const supabase = await createClient();
+      const { data: clients } = await supabase.from("clients").select("id, name");
+      const normalized = extracted.client_name.trim().toLowerCase();
+      const match = (clients || []).find((c) => c.name.trim().toLowerCase() === normalized);
+      suggestedClientId = match?.id ?? null;
+    }
+
+    return { data: { ...extracted, suggested_client_id: suggestedClientId } };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to extract the file" };
   }
 }
