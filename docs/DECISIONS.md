@@ -1227,3 +1227,37 @@ column and used it to pre-fill "Due date" wherever an invoice is created.
 - No changes needed in `invoices/actions.ts`'s `createInvoice` — it already
   takes `due_date` verbatim from the form, which now simply arrives
   pre-filled.
+
+## Decision 25: Multi-currency Xero invoice push
+
+Decision 5 deliberately scoped Xero push to SGD-only in v1 — not a
+technical limitation, but because this app's `exchange_rate` field on an
+invoice is a manual, optional, PDF-display number with no guarantee it
+matches a rate Xero would consider correct/current. That decision framed
+it as a fast-follow once SGD push was proven, not a permanent cut, and it
+was the next confirmed priority.
+
+Turned out to be a very small change: the entire SGD restriction was one
+guard + one hardcode in `lib/xero/buildInvoicePayload.ts`. GST/tax handling
+is percentage-based against the org's configured Xero tax type, so it's
+already currency-agnostic; `findOrCreateXeroContact` never touches
+currency either.
+
+- `buildInvoicePayload.ts`: replaced the `currency !== "SGD"` guard with a
+  lookup against `xero-node`'s own `CurrencyCode` enum (case-insensitive),
+  throwing a clear error for anything the enum doesn't recognize instead of
+  letting an invalid currency string reach Xero's API opaquely.
+- Added `exchange_rate` to the `InvoiceForXero` type and set it as the
+  payload's `currencyRate` when present. When absent (the field is
+  optional/unvalidated in `InvoiceForm.tsx`, and nullable in the DB), it's
+  simply omitted — `xero-node`'s own docs say Xero falls back to its XE.com
+  day rate in that case, so there was no need to add new UI validation
+  requiring a rate before push; Xero already tolerates exactly the "we
+  don't have a trustworthy rate" case Decision 5 was worried about.
+- `pushInvoiceToXero` (`invoices/actions.ts`) now forwards
+  `invoice.exchange_rate` into the payload builder call — it was already
+  fetched on the invoice row but never passed through before.
+- No changes needed anywhere else: no UI gates on currency existed beyond
+  the guard itself (confirmed via grep), and status/invoice-number refresh
+  (`refreshInvoiceFromXero`, `checkInvoicesAgainstXero`) doesn't touch
+  currency.

@@ -6,6 +6,7 @@ export type InvoiceForXero = {
   due_date: string | null;
   reference: string | null;
   currency: string;
+  exchange_rate?: number | null;
   gst_applicable: boolean;
   gst_rate: number;
 };
@@ -30,10 +31,10 @@ export function buildInvoicePayload(
   contactId: string,
   connection: XeroConnectionRow
 ): Invoice {
-  if (invoice.currency.toUpperCase() !== "SGD") {
-    throw new Error(
-      `Xero push is limited to SGD invoices for now (this invoice is ${invoice.currency}).`
-    );
+  const currencyCode =
+    CurrencyCode[invoice.currency.toUpperCase() as keyof typeof CurrencyCode];
+  if (!currencyCode) {
+    throw new Error(`Xero doesn't recognize the currency "${invoice.currency}".`);
   }
   if (!connection.default_account_code) {
     throw new Error("Xero isn't fully configured yet — set a default account code in Settings.");
@@ -77,7 +78,8 @@ export function buildInvoicePayload(
     // own number (per the org's Invoice Settings), which pushInvoiceToXero
     // and refreshInvoiceFromXero then pull back into this app.
     reference: invoice.reference ?? undefined,
-    currencyCode: CurrencyCode.SGD,
+    currencyCode,
+    currencyRate: invoice.exchange_rate ?? undefined,
     lineAmountTypes: LineAmountTypes.Exclusive,
     status: Invoice.StatusEnum.DRAFT,
   };
