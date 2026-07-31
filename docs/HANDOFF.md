@@ -84,12 +84,14 @@ other session or agent.
   `buildInvoicePayload.ts` — a pure, unit-tested function — for the actual
   payload), triggered via `pushInvoiceToXero()` in
   `app/(app)/invoices/actions.ts` and a "Push to Xero" button in
-  `InvoiceActions.tsx`. **v1 is SGD-only, DRAFT-only, one-way** (no pulling
-  payment status back from Xero) — read `docs/DECISIONS.md` Decision 5 in
-  full before touching this, especially the refresh-token-rotation handling
-  and the gst_rate-vs-Xero-tax-rate validation; both are easy to accidentally
-  break in a way that either silently desyncs the connection after ~60 days
-  or pushes a wrong tax amount into the user's real accounting system.
+  `InvoiceActions.tsx`. Supports multi-currency push (Decision 25) and pulls
+  status back from Xero via "Refresh from Xero" (single invoice) and a bulk
+  check (Decisions 6–7) — **still DRAFT-only**, no auto-authorise — read
+  `docs/DECISIONS.md` Decision 5 in full before touching this, especially
+  the refresh-token-rotation handling and the gst_rate-vs-Xero-tax-rate
+  validation; both are easy to accidentally break in a way that either
+  silently desyncs the connection after ~60 days or pushes a wrong tax
+  amount into the user's real accounting system.
 
 ## Env vars (Vercel, Production + Preview)
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
@@ -104,9 +106,9 @@ other session or agent.
   `SALESFORCE_LOGIN_URL` (optional, defaults to `https://login.salesforce.com`
   — set to `https://test.salesforce.com` for a sandbox org). OAuth connect
   (Decision 13) and quote push (Decision 14, both in `docs/DECISIONS.md`) are
-  both built — quotes push as an empty standard Quote under an open-stage
-  Opportunity, which later flips to Closed Won once a PO is matched and the
-  linked invoice is sent. Still on the preview deployment only, not merged.
+  both built and merged to `main` — quotes push as an empty standard Quote
+  under an open-stage Opportunity, which later flips to Closed Won once a PO
+  is matched and the linked invoice is sent.
 - `ANTHROPIC_API_KEY`
 - `EMAIL_QUOTE_WEBHOOK_SECRET`, `CRON_SECRET` — both vestigial (the n8n webhook and
   the cron job were superseded by the in-app pipeline above); harmless to leave, fine
@@ -114,19 +116,10 @@ other session or agent.
 
 ## What's next (confirmed priorities, in order)
 
-**1. PDF-download gating on the Salesforce quote number.** Salesforce quote
-push itself is now built (Decision 14) — `quotations.salesforce_quote_number`
-gets populated on push. Not yet scoped: gating/disabling "Download PDF" until
-that field is set, per the original reference material's
-`{{SalesforceQuoteNo}}` placeholder intent (Salesforce as the source of truth
-for quote numbers rather than the freeform `quote_number` text field).
-
-**Fast-follows on the Xero v1 cuts, not yet prioritized:**
-- Multi-currency Xero push (v1 is SGD-only — see Decision 5 for why).
-- Two-way sync: pulling payment status back from Xero into this app's own
-  `status` field (v1 is one-way/push-only).
-- A "View in Xero" deep link on the invoice detail page (skipped in v1, no
-  way to verify the URL format without a real connected org at the time).
+**1. "View in Xero" deep link.** The last open Xero v1 fast-follow — a link
+on the invoice detail page straight to the invoice in Xero once pushed
+(skipped in v1, no way to verify the URL format without a real connected
+org at the time; see Decision 5).
 
 **Still on the shelf, not reprioritized:**
 - **Editable docx export.** Self-contained, no external integration. Use the
@@ -137,12 +130,16 @@ for quote numbers rather than the freeform `quote_number` text field).
   formatting until requested — that logic is intricate (see
   `DocumentPdf.tsx`) and isn't worth replicating exactly until someone needs
   an editable non-SGD document.
-- Multi-quote-per-email splitting.
 - Admin cross-user visibility.
 
-All of the above are real Phase 2 work but meaningfully bigger than a
-single-session task — external integrations, schema-shape changes, or an
-RLS/security-model change — and should be scoped individually when picked up.
+Both are real Phase 2 work but meaningfully bigger than a single-session
+task — a new document format, or an RLS/security-model change — and should
+be scoped individually when picked up.
+
+(Previously listed here as pending, now shipped — see `docs/DECISIONS.md`:
+PDF-download gating on the Salesforce quote number (Decision 19),
+multi-currency Xero push (Decision 25), two-way Xero status sync
+(Decisions 6–7), and multi-quote-per-email splitting (Decision 21).)
 
 ## Avoiding the mix-up that just happened
 Before drawing conclusions from Supabase data alone, confirm you actually have this
