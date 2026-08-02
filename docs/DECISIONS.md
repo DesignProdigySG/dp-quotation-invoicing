@@ -1372,3 +1372,24 @@ one `slack_channel_id`/`slack_message_ts` pair) and reconciling them so
 resolving one doesn't leave the other showing live buttons for an
 already-made decision. Worth adding if more than one person ever needs to
 see/act on these; not worth the complexity for a single recipient.
+
+**Third follow-up, same day**: manually testing `/api/cron/gmail-check` via
+curl kept "redirecting" instead of returning JSON. Chased Vercel Deployment
+Protection first (a real thing worth checking generally) but the project
+had none configured — the actual cause was in this app's own code:
+`middleware.ts`'s matcher runs `lib/supabase/middleware.ts`'s `updateSession`
+on every path except static assets/images, and that function redirects any
+request with no valid Supabase session cookie straight to `/login`. A curl
+call (or GitHub Actions, or Slack's webhook) obviously has no session
+cookie, so every legitimate call to `/api/cron/gmail-check` or
+`/api/slack/interactions` was getting silently bounced to a login page
+instead of ever reaching the route's own bearer-secret/HMAC-signature check
+— this wasn't a testing-only inconvenience, it would have broken the real
+thing too, on any environment. Fixed by excluding `api/cron` and `api/slack`
+from the middleware's matcher (`middleware.ts`) — those two routes
+authenticate themselves and were never meant to require a browser session.
+Note: `app/api/quotes/from-email/route.ts` (the vestigial n8n-era webhook,
+see `docs/HANDOFF.md`) likely has this exact same problem and has probably
+never worked since this middleware was added — left alone since that route
+is already flagged as unused/fine to remove, not touched here to keep this
+fix scoped to the routes this feature actually needs.
