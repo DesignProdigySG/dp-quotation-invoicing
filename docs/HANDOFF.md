@@ -39,11 +39,22 @@ other session or agent.
   - "Check now": a modal-based review-first flow
     (`app/(app)/settings/CheckNowModal.tsx` + `actions.ts`) — manual trigger,
     nothing auto-drafts
-  - Automatic trigger + Slack: `app/api/cron/gmail-check/route.ts` (Vercel
-    Cron, `vercel.json`, every 10 min, `CRON_SECRET`-gated) runs the exact
-    same pipeline as "Check now" for every `gmail_connections` row with a
-    watched label, then posts a Slack message per newly-created
-    `unmatched_email_quotes` row (`lib/slack/postQuoteSuggestion.ts`) with a
+  - Automatic trigger + Slack: `app/api/cron/gmail-check/route.ts`
+    (`CRON_SECRET`-gated) runs the exact same pipeline as "Check now" for
+    every `gmail_connections` row with a watched label, then posts a Slack
+    message per newly-created `unmatched_email_quotes` row. Triggered every
+    10 min by a GitHub Actions scheduled workflow
+    (`.github/workflows/gmail-check-cron.yml`), **not** Vercel Cron — Vercel's
+    Hobby plan only allows daily cron schedules (Pro is required for
+    anything more frequent), so this project deliberately stays off Vercel
+    Cron to avoid that upgrade. The route itself doesn't care who calls
+    it — it's just an `Authorization: Bearer $CRON_SECRET` check — so
+    switching the trigger mechanism needed no app code changes. Two caveats
+    inherent to GitHub Actions schedules, not this app's code: they're
+    best-effort (can be delayed under GitHub-wide load) and GitHub
+    auto-disables a scheduled workflow after 60 days with no commits to the
+    repo (re-enable from the repo's Actions tab if that happens).
+    The Slack post itself uses `lib/slack/postQuoteSuggestion.ts`, with a
     "✅ Correct" button and a client-picker dropdown. Both routes share one
     pipeline — `lib/email-quote/processGmailMessagesForConnection.ts` — so
     "Check now" and the cron trigger can't drift apart.
@@ -131,8 +142,14 @@ other session or agent.
   is matched and the linked invoice is sent.
 - `ANTHROPIC_API_KEY`
 - `CRON_SECRET` — **no longer vestigial**: gates `app/api/cron/gmail-check/route.ts`
-  (the Vercel Cron job checks `Authorization: Bearer $CRON_SECRET`). Originally
-  left over from a superseded n8n-era job, now reactivated for this.
+  (checks `Authorization: Bearer $CRON_SECRET`). Originally left over from a
+  superseded n8n-era job, now reactivated for this. Also needs adding as a
+  **GitHub Actions repo secret** of the same name (Settings → Secrets and
+  variables → Actions → New repository secret) — that's what
+  `.github/workflows/gmail-check-cron.yml` sends on every scheduled call.
+  Also add an Actions **repo variable** (not secret, not sensitive) named
+  `APP_URL` with the same value as the Vercel env var of the same name — the
+  workflow calls `${{ vars.APP_URL }}/api/cron/gmail-check`.
 - `EMAIL_QUOTE_WEBHOOK_SECRET` — still vestigial (the n8n webhook it gated was
   superseded by the in-app pipeline); harmless to leave, fine to remove later.
 - `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CHANNEL_ID` — a single

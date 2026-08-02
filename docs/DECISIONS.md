@@ -1325,3 +1325,20 @@ that one repetitive question well.
   Feeding recent corrections as few-shot examples into `fuzzyMatchClient`'s
   prompt was considered for new senders but deferred — not worth doing
   against an empty table on day one.
+
+**Follow-up, same day**: the user wanted to stay on Vercel's Hobby plan.
+Confirmed (web search) that Hobby-tier Vercel Cron only allows daily
+schedules — a `vercel.json` cron more frequent than that fails to deploy at
+all, so the every-10-minutes schedule this decision originally shipped with
+would have needed a Vercel Pro upgrade. Removed `vercel.json` and replaced
+the trigger with `.github/workflows/gmail-check-cron.yml`, a GitHub Actions
+scheduled workflow that just calls the same `CRON_SECRET`-gated route with
+a plain `curl` — the route has no idea (and doesn't need to know) which
+scheduler is calling it, so zero app code changed. Trade-off worth noting:
+GitHub's scheduled workflows are best-effort (can lag under GitHub-wide
+load) and auto-disable after 60 days with no commits to the repo — both
+fine for this use case, but worth remembering if the automatic check
+appears to have silently stopped firing. Needs two new GitHub repo-level
+settings the user has to add themselves (a `CRON_SECRET` Actions secret and
+an `APP_URL` Actions variable, both mirroring the same values already
+required in Vercel's env vars) — documented in `docs/HANDOFF.md`.
