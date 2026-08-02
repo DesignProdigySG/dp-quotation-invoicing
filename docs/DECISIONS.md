@@ -1261,3 +1261,135 @@ currency either.
   the guard itself (confirmed via grep), and status/invoice-number refresh
   (`refreshInvoiceFromXero`, `checkInvoicesAgainstXero`) doesn't touch
   currency.
+
+## Decision 26: Gmail → Slack automation — auto-trigger, interactive confirm, learn-over-time
+
+Feedback from the user's boss/colleague: quote intake "feels a bit manual."
+Investigation showed most of the automation already existed and just wasn't
+wired to fire itself — `gmail_connections.watched_label_id` and
+`listUnprocessedGmailCandidates()`/`processSelectedGmailMessages()`
+(`app/(app)/settings/actions.ts`) already did label-filtered candidate
+listing and the full match/extract/insert pipeline; the only manual step
+was a human clicking "Check now" in `CheckNowModal.tsx`.
+
+Two ideas were floated (an in-Gmail AI chat widget vs. label→automatic
+processing→Slack notification); the user picked the Slack direction, with
+one addition — confirm/correct the suggested client right in Slack, and get
+smarter over time from corrections. Confirmed early that a Slack button
+can't one-click-create a finished quotation: `ExtractedQuoteRequest` items
+(`lib/email-quote/extractQuoteFromEmail.ts`) only ever have
+`description`/`quantity`, never a price — customers don't state pricing in
+a request — so pricing always needs a human in `/review` regardless of
+whether the client match was right. Slack's job is narrowed to resolving
+that one repetitive question well.
+
+- **Automatic trigger**: `app/api/cron/gmail-check/route.ts`, a Vercel Cron
+  job (`vercel.json`, every 10 min) gated by the previously-vestigial
+  `CRON_SECRET`. Real-time Gmail push (watch + Pub/Sub) was considered and
+  set aside — genuine standing infrastructure (a topic, a webhook, a
+  subscription needing renewal every 7 days) for a latency win that doesn't
+  matter for quote-request emails.
+- **Shared pipeline, no duplication**: extracted the core of
+  `processSelectedGmailMessages` into
+  `lib/email-quote/processGmailMessagesForConnection.ts` — takes the
+  connection/client list as plain data instead of deriving them from a
+  signed-in session, so both the existing "Check now" Server Action (thin
+  wrapper now) and the session-less cron route call the exact same logic.
+  Same fix applied to `insertUnmatchedQuote` (now returns the inserted row's
+  id) so the cron route knows exactly which rows are new without a second
+  query.
+- **Slack notification + inline correction**: `lib/slack/` — a plain
+  `fetch()`-based Web API client (no `@slack/*` dependency needed for two
+  calls), a Block Kit message builder, and HMAC signature verification
+  (`verifySlackRequest`, mirroring `lib/crypto.ts`'s existing use of Node's
+  `crypto`). A new `unmatched_email_quotes` row gets a message with a
+  "✅ Correct" button and a client-picker dropdown — no free-text NLU in v1,
+  a dropdown is simpler to get right and still keeps the correction inside
+  Slack. `app/api/slack/interactions/route.ts` receives the callback,
+  verifies it, and edits the message in place (`chat.update`) — it updates
+  the row's suggested client, **not** a full quotation.
+- **No new Supabase table for Slack credentials**: unlike Gmail/Xero/
+  Salesforce this isn't a per-end-user OAuth integration, just one
+  app-level bot posting to one channel — `SLACK_BOT_TOKEN`/
+  `SLACK_SIGNING_SECRET`/`SLACK_CHANNEL_ID` env vars are the right fit,
+  same tier as `ANTHROPIC_API_KEY`.
+- **Getting smarter over time**: new `email_client_corrections` table
+  (`owner_id`, `sender_email`, `client_id`, unique per owner+sender).
+  Written on every Slack confirm *and* every correction — a repeatedly-
+  confirmed sender is just as trustworthy as a corrected one. Checked as a
+  new **Tier 0** in `processGmailMessagesForConnection`, before the
+  original 3-tier matcher (`findClientByEmail` → `fuzzyMatchClient` →
+  extraction) — an exact hit here is strictly more reliable than a fresh
+  guess and short-circuits the rest of the pipeline, so a corrected sender
+  is deterministically matched (no AI call) from the next email onward.
+  Feeding recent corrections as few-shot examples into `fuzzyMatchClient`'s
+  prompt was considered for new senders but deferred — not worth doing
+  against an empty table on day one.
+
+**Follow-up, same day**: the user wanted to stay on Vercel's Hobby plan.
+Confirmed (web search) that Hobby-tier Vercel Cron only allows daily
+schedules — a `vercel.json` cron more frequent than that fails to deploy at
+all, so the every-10-minutes schedule this decision originally shipped with
+would have needed a Vercel Pro upgrade. Removed `vercel.json` and replaced
+the trigger with `.github/workflows/gmail-check-cron.yml`, a GitHub Actions
+scheduled workflow that just calls the same `CRON_SECRET`-gated route with
+a plain `curl` — the route has no idea (and doesn't need to know) which
+scheduler is calling it, so zero app code changed. Trade-off worth noting:
+GitHub's scheduled workflows are best-effort (can lag under GitHub-wide
+load) and auto-disable after 60 days with no commits to the repo — both
+fine for this use case, but worth remembering if the automatic check
+appears to have silently stopped firing. Needs two new GitHub repo-level
+settings the user has to add themselves (a `CRON_SECRET` Actions secret and
+an `APP_URL` Actions variable, both mirroring the same values already
+required in Vercel's env vars) — documented in `docs/HANDOFF.md`.
+
+**Second follow-up, same day**: switched notification delivery from a shared
+Slack channel to DMing the Gmail connection's owner directly. Confirmed
+Slack's `chat.postMessage` treats a user id exactly like a channel id in its
+`channel` parameter (auto-opens a DM), so this needed no new Slack
+capability — but it did surface one real bug in the original channel-only
+code: `postSlackMessage` was returning the *input* channel back to the
+caller instead of Slack's own response `channel` field. For a real channel
+those are identical so it happened to work, but for a DM, Slack's response
+`channel` is the D-prefixed conversation id — a different value than the
+U-prefixed user id passed in — so the original code would have stored the
+wrong id for `chat.update` to edit the message on confirm/correct. Fixed as
+part of this change (`lib/slack/client.ts`).
+
+Who to DM is resolved dynamically, not hardcoded: `resolveOwnerSlackUserId`
+(`lib/slack/resolveOwnerSlackUser.ts`) looks up the Gmail connection owner's
+email via Supabase Auth's admin API, then calls Slack's `users.lookupByEmail`
+(new `users:read.email` bot scope) to find the matching Slack account. This
+means the Slack workspace member's email must match their login email for
+this app — a real constraint, but the right one for a single-owner setup,
+and it means zero reconfiguration if the app is ever used by a different
+person. `SLACK_CHANNEL_ID` is gone entirely.
+
+Considered supporting a channel post *and* the DM together, since Slack
+allows both — deliberately deferred: doing it well means tracking two
+independent interactive Slack messages per quote (today's schema only holds
+one `slack_channel_id`/`slack_message_ts` pair) and reconciling them so
+resolving one doesn't leave the other showing live buttons for an
+already-made decision. Worth adding if more than one person ever needs to
+see/act on these; not worth the complexity for a single recipient.
+
+**Third follow-up, same day**: manually testing `/api/cron/gmail-check` via
+curl kept "redirecting" instead of returning JSON. Chased Vercel Deployment
+Protection first (a real thing worth checking generally) but the project
+had none configured — the actual cause was in this app's own code:
+`middleware.ts`'s matcher runs `lib/supabase/middleware.ts`'s `updateSession`
+on every path except static assets/images, and that function redirects any
+request with no valid Supabase session cookie straight to `/login`. A curl
+call (or GitHub Actions, or Slack's webhook) obviously has no session
+cookie, so every legitimate call to `/api/cron/gmail-check` or
+`/api/slack/interactions` was getting silently bounced to a login page
+instead of ever reaching the route's own bearer-secret/HMAC-signature check
+— this wasn't a testing-only inconvenience, it would have broken the real
+thing too, on any environment. Fixed by excluding `api/cron` and `api/slack`
+from the middleware's matcher (`middleware.ts`) — those two routes
+authenticate themselves and were never meant to require a browser session.
+Note: `app/api/quotes/from-email/route.ts` (the vestigial n8n-era webhook,
+see `docs/HANDOFF.md`) likely has this exact same problem and has probably
+never worked since this middleware was added — left alone since that route
+is already flagged as unused/fine to remove, not touched here to keep this
+fix scoped to the routes this feature actually needs.

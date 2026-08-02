@@ -109,6 +109,41 @@ export type Database = {
         }
         Relationships: []
       }
+      email_client_corrections: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          owner_id: string
+          sender_email: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          owner_id: string
+          sender_email: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          owner_id?: string
+          sender_email?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_client_corrections_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feedback: {
         Row: {
           created_at: string
@@ -619,6 +654,8 @@ export type Database = {
           resolved_quotation_id: string | null
           sender_email: string
           sender_name: string | null
+          slack_channel_id: string | null
+          slack_message_ts: string | null
           status: string
           subject: string | null
           suggested_client_id: string | null
@@ -634,6 +671,8 @@ export type Database = {
           resolved_quotation_id?: string | null
           sender_email: string
           sender_name?: string | null
+          slack_channel_id?: string | null
+          slack_message_ts?: string | null
           status?: string
           subject?: string | null
           suggested_client_id?: string | null
@@ -649,6 +688,8 @@ export type Database = {
           resolved_quotation_id?: string | null
           sender_email?: string
           sender_name?: string | null
+          slack_channel_id?: string | null
+          slack_message_ts?: string | null
           status?: string
           subject?: string | null
           suggested_client_id?: string | null
