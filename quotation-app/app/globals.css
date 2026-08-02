@@ -333,6 +333,47 @@ textarea:focus {
   z-index: 90;
 }
 
+.help-chat-trigger {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 90;
+}
+
+.help-chat-messages {
+  max-height: 45vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.help-chat-empty {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.help-chat-bubble {
+  padding: 8px 12px;
+  border-radius: 10px;
+  max-width: 85%;
+  white-space: pre-wrap;
+  font-size: 14px;
+}
+
+.help-chat-bubble-user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+}
+
+.help-chat-bubble-assistant {
+  align-self: flex-start;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
 .xero-voided {
   color: var(--danger);
   font-weight: 600;
