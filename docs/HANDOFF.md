@@ -152,12 +152,26 @@ other session or agent.
   workflow calls `${{ vars.APP_URL }}/api/cron/gmail-check`.
 - `EMAIL_QUOTE_WEBHOOK_SECRET` — still vestigial (the n8n webhook it gated was
   superseded by the in-app pipeline); harmless to leave, fine to remove later.
-- `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CHANNEL_ID` — a single
-  app-level Slack bot (create one in the workspace, add the `chat:write`
-  scope, install it, enable Interactivity with Request URL
-  `<app>/api/slack/interactions`) posting quote-suggestion notifications to
-  one channel. Not a per-user OAuth connection like Gmail/Xero/Salesforce —
-  no DB row, just these three env vars.
+- `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET` — a single app-level Slack bot
+  (create one in the workspace, add the `chat:write` **and**
+  `users:read.email` scopes, install it, enable Interactivity with Request
+  URL `<app>/api/slack/interactions`) that **DMs the Gmail connection's
+  owner directly** — no channel, no `SLACK_CHANNEL_ID`. Not a per-user OAuth
+  connection like Gmail/Xero/Salesforce — no DB row, just these two env
+  vars.
+  - Resolution is dynamic (`lib/slack/resolveOwnerSlackUser.ts`): looks up
+    the owner's email via Supabase Auth admin (`auth.admin.getUserById`),
+    then calls Slack's `users.lookupByEmail` to find their Slack account —
+    **the Slack workspace member's email must match the email they log
+    into this app with**, or the DM silently fails (surfaced as an error in
+    that cron run's summary, not a crash — one owner's unmatched email
+    doesn't block anyone else's).
+  - Posting to a shared channel (in addition to, or instead of, the DM) was
+    considered and deliberately skipped for now — doing both well would mean
+    tracking and keeping two independent interactive messages in sync (each
+    needs its own id, and resolving one has to update the other so it can't
+    still show live buttons for an already-made decision). Revisit if more
+    than one person ends up needing to see/act on these.
 - `APP_URL` — this app's own base URL (e.g. `https://<project>.vercel.app`),
   used to build the "Open in app" link in Slack messages. Server-only, no
   `NEXT_PUBLIC_` prefix needed.

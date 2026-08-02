@@ -1342,3 +1342,33 @@ appears to have silently stopped firing. Needs two new GitHub repo-level
 settings the user has to add themselves (a `CRON_SECRET` Actions secret and
 an `APP_URL` Actions variable, both mirroring the same values already
 required in Vercel's env vars) — documented in `docs/HANDOFF.md`.
+
+**Second follow-up, same day**: switched notification delivery from a shared
+Slack channel to DMing the Gmail connection's owner directly. Confirmed
+Slack's `chat.postMessage` treats a user id exactly like a channel id in its
+`channel` parameter (auto-opens a DM), so this needed no new Slack
+capability — but it did surface one real bug in the original channel-only
+code: `postSlackMessage` was returning the *input* channel back to the
+caller instead of Slack's own response `channel` field. For a real channel
+those are identical so it happened to work, but for a DM, Slack's response
+`channel` is the D-prefixed conversation id — a different value than the
+U-prefixed user id passed in — so the original code would have stored the
+wrong id for `chat.update` to edit the message on confirm/correct. Fixed as
+part of this change (`lib/slack/client.ts`).
+
+Who to DM is resolved dynamically, not hardcoded: `resolveOwnerSlackUserId`
+(`lib/slack/resolveOwnerSlackUser.ts`) looks up the Gmail connection owner's
+email via Supabase Auth's admin API, then calls Slack's `users.lookupByEmail`
+(new `users:read.email` bot scope) to find the matching Slack account. This
+means the Slack workspace member's email must match their login email for
+this app — a real constraint, but the right one for a single-owner setup,
+and it means zero reconfiguration if the app is ever used by a different
+person. `SLACK_CHANNEL_ID` is gone entirely.
+
+Considered supporting a channel post *and* the DM together, since Slack
+allows both — deliberately deferred: doing it well means tracking two
+independent interactive Slack messages per quote (today's schema only holds
+one `slack_channel_id`/`slack_message_ts` pair) and reconciling them so
+resolving one doesn't leave the other showing live buttons for an
+already-made decision. Worth adding if more than one person ever needs to
+see/act on these; not worth the complexity for a single recipient.

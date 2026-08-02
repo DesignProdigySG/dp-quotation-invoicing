@@ -1,13 +1,16 @@
 import { postSlackMessage } from "./client";
+import { resolveOwnerSlackUserId } from "./resolveOwnerSlackUser";
 import { buildSuggestionText, buildSuggestionBlocks } from "./blocks";
 import { createServiceClient } from "@/lib/supabase/service";
 
-// Posts the Slack notification for one newly-inserted unmatched_email_quotes
-// row, then stores the resulting channel/ts back onto that row so the
-// interactions route (app/api/slack/interactions/route.ts) can edit the
-// message in place once someone confirms or corrects the suggestion.
+// DMs the Gmail connection's owner (resolved via resolveOwnerSlackUserId)
+// about one newly-inserted unmatched_email_quotes row, then stores the
+// resulting DM-conversation id/ts back onto that row so the interactions
+// route (app/api/slack/interactions/route.ts) can edit the message in place
+// once someone confirms or corrects the suggestion.
 export async function postQuoteSuggestion(params: {
   quoteId: string;
+  ownerId: string;
   senderEmail: string;
   senderName: string | null;
   suggestedClientId: string | null;
@@ -15,8 +18,7 @@ export async function postQuoteSuggestion(params: {
   matchSource: string | null;
   allClients: { id: string; name: string }[];
 }): Promise<void> {
-  const channel = process.env.SLACK_CHANNEL_ID;
-  if (!channel) throw new Error("SLACK_CHANNEL_ID is not set");
+  const slackUserId = await resolveOwnerSlackUserId(params.ownerId);
   const appUrl = process.env.APP_URL;
   if (!appUrl) throw new Error("APP_URL is not set");
 
@@ -34,7 +36,7 @@ export async function postQuoteSuggestion(params: {
     clients: params.allClients,
   });
 
-  const { ts } = await postSlackMessage(channel, text, blocks);
+  const { channel, ts } = await postSlackMessage(slackUserId, text, blocks);
 
   const supabase = createServiceClient();
   await supabase

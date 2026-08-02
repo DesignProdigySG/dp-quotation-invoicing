@@ -64,6 +64,7 @@ export async function GET(req: NextRequest) {
         try {
           await postQuoteSuggestion({
             quoteId: created.id,
+            ownerId: connection.owner_id,
             senderEmail: created.sender_email,
             senderName: created.sender_name,
             suggestedClientId: created.suggested_client_id,
