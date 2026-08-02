@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../login/actions";
 import FeedbackWidget from "./feedback/FeedbackWidget";
+import HelpChatWidget from "./help/HelpChatWidget";
 
 const FEEDBACK_OWNER_EMAIL = "yuanwen@dp.sg";
 
@@ -55,6 +56,7 @@ export default async function AppLayout({
       </div>
       <div className="container">{children}</div>
       <FeedbackWidget />
+      <HelpChatWidget />
     </>
   );
 }

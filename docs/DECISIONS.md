@@ -1393,3 +1393,48 @@ see `docs/HANDOFF.md`) likely has this exact same problem and has probably
 never worked since this middleware was added — left alone since that route
 is already flagged as unused/fine to remove, not touched here to keep this
 fix scoped to the routes this feature actually needs.
+
+## Decision 27: In-app help chatbot (simple FAQ version)
+
+User wants a small chatbot new users can ask "how do I use this app" —
+floated as an exploratory question, deliberately scoped down to a simple
+FAQ bot for v1 rather than something that references a user's live data or
+holds long multi-turn context (a bigger, separate project if ever needed).
+
+Built by reusing what already existed rather than adding anything new:
+- `@anthropic-ai/sdk` was already a dependency (used throughout the email
+  extraction pipeline) — no new API integration.
+- `app/(app)/feedback/FeedbackWidget.tsx` (a floating button → modal) was
+  the exact UI shape needed, so the new widget mirrors its structure
+  (`useState` for open/busy/error, a `.btn-primary` trigger button
+  positioned `fixed`, `.modal-overlay`/`.modal-content` for the panel).
+
+What's new:
+- `lib/help-chat/askHelpChat.ts`: a hand-written system prompt describing
+  the app's actual features in plain, end-user language (translated from
+  what's in `docs/HANDOFF.md`, not copy-pasted — that file is written for
+  a future dev session, file paths and decision numbers included, and
+  would be a bad, confusing thing to hand an end user), plus a thin
+  `askHelpChat(messages)` wrapper around `anthropic.messages.create`
+  (Haiku, same model tier used for the cheaper extraction calls elsewhere
+  — a plain-language FAQ answer doesn't need a bigger model).
+- `app/(app)/help/actions.ts`: a `"use server"` action gated on
+  `supabase.auth.getUser()` (same pattern as `feedback/actions.ts`), takes
+  the running message history from the client and returns the model's
+  reply. No persistence — conversation history lives only in the widget's
+  React state for that page load, by design, matching the "simple" scope;
+  nothing about a user's help-chat questions gets stored.
+- `app/(app)/help/HelpChatWidget.tsx`: floating "Help" button
+  (`.help-chat-trigger`, bottom-**left** — `.feedback-trigger` already
+  occupies bottom-right) opening a chat panel; Enter sends, Shift+Enter
+  makes a newline.
+- Wired into `app/(app)/layout.tsx` next to `<FeedbackWidget />`, so it's
+  available on every authenticated page app-wide.
+
+## Verification
+- `npx tsc --noEmit` clean.
+- `npm run build` succeeds across all 27 routes with no new errors.
+- Not manually clicked through in a live browser session this round (no
+  authenticated session available in this environment) — worth a quick
+  real check on the next live-preview pass to confirm the model's answers
+  read naturally and the modal looks right end to end.
