@@ -199,10 +199,24 @@ can do. Once that happens:
 org to Pro (see "Staging environment & migration workflow" above for the
 full plan) — pick this up first once that's done.
 
-**1. "View in Xero" deep link.** The last open Xero v1 fast-follow — a link
-on the invoice detail page straight to the invoice in Xero once pushed
-(skipped in v1, no way to verify the URL format without a real connected
-org at the time; see Decision 5).
+**New direction, exploratory only — read before building anything here:**
+`docs/POOLS_AND_DRAWS_DESIGN.md` — a design discussion (not a spec, not built) for
+tracking the *other* side of money: incoming payments split into per-user "pools"
+(partner budgets, media budgets) and outgoing "draws" (vendor reimbursement
+claims) against them. Converged on relational tables (not a graph database, see
+the doc for why), an effective-dated vendor→pool assignment table, and an
+AI-driven drift-detection idea — but real open questions remain (see the doc's
+"What's genuinely still open" section) and the person who scoped this said
+outright they don't know the best way to tackle it yet. Also flags the same
+"Supabase MCP pointed at the wrong project" blocker noted below — check that's
+resolved before attempting any of this.
+
+**Fast-follows on the Xero v1 cuts, not yet prioritized:**
+- Multi-currency Xero push (v1 is SGD-only — see Decision 5 for why).
+- Two-way sync: pulling payment status back from Xero into this app's own
+  `status` field (v1 is one-way/push-only).
+- A "View in Xero" deep link on the invoice detail page (skipped in v1, no
+  way to verify the URL format without a real connected org at the time).
 
 **Still on the shelf, not reprioritized:**
 - **Editable docx export.** Self-contained, no external integration. Use the
