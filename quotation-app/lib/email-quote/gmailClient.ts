@@ -3,7 +3,7 @@ import { getOAuthClient } from "@/lib/google/oauthClient";
 import { decrypt } from "@/lib/crypto";
 import type { Tables } from "@/types/database.types";
 
-type GmailConnection = Tables<"gmail_connections">;
+export type GmailConnection = Tables<"gmail_connections">;
 
 export function getGmailClientForConnection(connection: GmailConnection): gmail_v1.Gmail {
   const oauth2Client = getOAuthClient();

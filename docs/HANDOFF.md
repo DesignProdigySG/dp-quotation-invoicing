@@ -37,13 +37,33 @@ other session or agent.
 - Gmail ingestion pipeline:
   - Connect: `app/api/auth/gmail/{start,callback}/route.ts`, `app/(app)/settings/`
   - "Check now": a modal-based review-first flow
-    (`app/(app)/settings/CheckNowModal.tsx` + `actions.ts`) — no cron, nothing
-    auto-drafts
-  - 3-tier matching: `lib/email-quote/matchClient.ts` (exact email → same-domain
-    fallback, with a free-mail-provider guard), `fuzzyMatchClient.ts` (AI, tier 2),
-    `extractQuoteWithClientContext.ts` (tailored extraction using the matched
-    client's `ai_instructions`, tier 3 — this field IS wired up, see
-    `ClientForm.tsx`)
+    (`app/(app)/settings/CheckNowModal.tsx` + `actions.ts`) — manual trigger,
+    nothing auto-drafts
+  - Automatic trigger + Slack: `app/api/cron/gmail-check/route.ts` (Vercel
+    Cron, `vercel.json`, every 10 min, `CRON_SECRET`-gated) runs the exact
+    same pipeline as "Check now" for every `gmail_connections` row with a
+    watched label, then posts a Slack message per newly-created
+    `unmatched_email_quotes` row (`lib/slack/postQuoteSuggestion.ts`) with a
+    "✅ Correct" button and a client-picker dropdown. Both routes share one
+    pipeline — `lib/email-quote/processGmailMessagesForConnection.ts` — so
+    "Check now" and the cron trigger can't drift apart.
+  - Slack button/select clicks land on `app/api/slack/interactions/route.ts`
+    (signature-verified via `lib/slack/verifyRequest.ts`), which updates the
+    row's suggested client and edits the Slack message in place — it does
+    **not** create the quotation (line items never have prices at this
+    stage — customers don't state pricing in a request — so a human always
+    finishes that in `/review`).
+  - **Gets smarter over time**: every Slack confirm/correction upserts
+    `email_client_corrections` (`owner_id`, `sender_email` → `client_id`).
+    `processGmailMessagesForConnection` checks this as **Tier 0**, before
+    the original 3-tier matcher — a previously-corrected sender is
+    deterministically matched from then on, no AI call needed.
+  - 3-tier matching (now Tiers 1–3, after the correction-table Tier 0
+    above): `lib/email-quote/matchClient.ts` (exact email → same-domain
+    fallback, with a free-mail-provider guard), `fuzzyMatchClient.ts` (AI,
+    tier 2), `extractQuoteWithClientContext.ts` (tailored extraction using
+    the matched client's `ai_instructions`, tier 3 — this field IS wired
+    up, see `ClientForm.tsx`)
   - Every result lands in `unmatched_email_quotes` for a human to confirm — reviewed
     via `app/(app)/review/` (`ReviewQueue.tsx`/`page.tsx`/`actions.ts`), which
     pre-fills a suggested client + match-source label
@@ -110,9 +130,20 @@ other session or agent.
   under an open-stage Opportunity, which later flips to Closed Won once a PO
   is matched and the linked invoice is sent.
 - `ANTHROPIC_API_KEY`
-- `EMAIL_QUOTE_WEBHOOK_SECRET`, `CRON_SECRET` — both vestigial (the n8n webhook and
-  the cron job were superseded by the in-app pipeline above); harmless to leave, fine
-  to remove later
+- `CRON_SECRET` — **no longer vestigial**: gates `app/api/cron/gmail-check/route.ts`
+  (the Vercel Cron job checks `Authorization: Bearer $CRON_SECRET`). Originally
+  left over from a superseded n8n-era job, now reactivated for this.
+- `EMAIL_QUOTE_WEBHOOK_SECRET` — still vestigial (the n8n webhook it gated was
+  superseded by the in-app pipeline); harmless to leave, fine to remove later.
+- `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CHANNEL_ID` — a single
+  app-level Slack bot (create one in the workspace, add the `chat:write`
+  scope, install it, enable Interactivity with Request URL
+  `<app>/api/slack/interactions`) posting quote-suggestion notifications to
+  one channel. Not a per-user OAuth connection like Gmail/Xero/Salesforce —
+  no DB row, just these three env vars.
+- `APP_URL` — this app's own base URL (e.g. `https://<project>.vercel.app`),
+  used to build the "Open in app" link in Slack messages. Server-only, no
+  `NEXT_PUBLIC_` prefix needed.
 
 ## Staging environment & migration workflow (planned, blocked on a Supabase plan upgrade)
 

@@ -10,18 +10,23 @@ export async function insertUnmatchedQuote(input: {
   parsed_data: Json;
   suggested_client_id?: string | null;
   suggested_client_source?: string | null;
-}) {
+}): Promise<{ id: string }> {
   const supabase = createServiceClient();
-  const { error } = await supabase.from("unmatched_email_quotes").insert({
-    owner_id: input.owner_id,
-    sender_email: input.sender_email,
-    sender_name: input.sender_name ?? null,
-    subject: input.subject ?? null,
-    gmail_message_id: input.gmail_message_id ?? null,
-    parsed_data: input.parsed_data,
-    suggested_client_id: input.suggested_client_id ?? null,
-    suggested_client_source: input.suggested_client_source ?? null,
-  });
+  const { data, error } = await supabase
+    .from("unmatched_email_quotes")
+    .insert({
+      owner_id: input.owner_id,
+      sender_email: input.sender_email,
+      sender_name: input.sender_name ?? null,
+      subject: input.subject ?? null,
+      gmail_message_id: input.gmail_message_id ?? null,
+      parsed_data: input.parsed_data,
+      suggested_client_id: input.suggested_client_id ?? null,
+      suggested_client_source: input.suggested_client_source ?? null,
+    })
+    .select("id")
+    .single();
 
   if (error) throw new Error(error.message);
+  return { id: data.id };
 }

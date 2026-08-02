@@ -14,10 +14,10 @@ import {
 import { parseSenderEmail } from "@/lib/email-quote/parseSenderEmail";
 import { findClientByEmail, type ClientForMatching } from "@/lib/email-quote/matchClient";
 import { fuzzyMatchClient } from "@/lib/email-quote/fuzzyMatchClient";
-import { extractQuoteFromEmail } from "@/lib/email-quote/extractQuoteFromEmail";
-import { extractQuoteWithClientContext } from "@/lib/email-quote/extractQuoteWithClientContext";
-import { insertUnmatchedQuote } from "@/lib/email-quote/insertUnmatchedQuote";
-import { collectAttachmentParts, fetchAttachmentContentBlocks } from "@/lib/email-quote/gmailAttachments";
+import {
+  processGmailMessagesForConnection,
+  type ProcessSelectedResult,
+} from "@/lib/email-quote/processGmailMessagesForConnection";
 import type { Json } from "@/types/database.types";
 import { getXeroClientForConnection } from "@/lib/xero/client";
 import { listTaxRates, listAccounts } from "@/lib/xero/settings";
@@ -327,15 +327,14 @@ export async function disconnectSalesforce(): Promise<{ error?: string }> {
   }
 }
 
-export type ProcessSelectedResult = {
-  processed: number;
-  quotesExtracted: number;
-  suggested: number;
-  unmatched: number;
-  failed: number;
-  errors: string[];
-};
+export type { ProcessSelectedResult };
 
+// Thin wrapper: resolves the signed-in user's own Gmail connection + client
+// list, then delegates the actual matching/extraction/insert pipeline to
+// processGmailMessagesForConnection (lib/email-quote/), which is also called
+// by the cron route (app/api/cron/gmail-check/route.ts) with no session at
+// all — one pipeline, two callers, so behavior can't drift between "Check
+// now" and the automatic trigger.
 export async function processSelectedGmailMessages(
   messageIds: string[]
 ): Promise<ProcessSelectedResult> {
@@ -346,6 +345,7 @@ export async function processSelectedGmailMessages(
     unmatched: 0,
     failed: 0,
     errors: [],
+    createdQuotes: [],
   };
 
   try {
@@ -371,97 +371,11 @@ export async function processSelectedGmailMessages(
     }
     const clients = (clientsData || []) as ClientForMatching[];
 
-    const gmail = getGmailClientForConnection(connection);
-
-    for (const messageId of messageIds) {
-      try {
-        const messageRes = await gmail.users.messages.get({
-          userId: "me",
-          id: messageId,
-          format: "full",
-        });
-        const message = messageRes.data;
-        const headers = message.payload?.headers || [];
-        const subject = headers.find((h) => h.name === "Subject")?.value || "";
-        const from = headers.find((h) => h.name === "From")?.value || "";
-        const bodyText = decodeBody(message.payload);
-
-        const attachmentParts = collectAttachmentParts(message.payload);
-        const attachments =
-          attachmentParts.length > 0
-            ? await fetchAttachmentContentBlocks(gmail, messageId, attachmentParts)
-            : [];
-
-        // Tier 1: deterministic (exact email, then same-domain fallback).
-        const headerEmail = parseSenderEmail(from);
-        let match: {
-          client: ClientForMatching;
-          source: "exact_email" | "email_domain" | "ai_fuzzy";
-        } | null = headerEmail ? findClientByEmail(clients, headerEmail) : null;
-
-        // Tier 2: cheap fuzzy match, only if tier 1 found nothing.
-        if (!match) {
-          const fuzzy = await fuzzyMatchClient({ subject, from, body: bodyText, clients });
-          if (fuzzy.client_id) {
-            const client = clients.find((c) => c.id === fuzzy.client_id);
-            if (client) match = { client, source: "ai_fuzzy" as const };
-          }
-        }
-
-        // Tier 3: extraction — tailored if a client was identified, generic
-        // otherwise. Returns an array: a single email (plus any attached
-        // images/PDFs) can contain more than one distinct quote request.
-        const extractedQuotes = match
-          ? await extractQuoteWithClientContext({
-              subject,
-              from,
-              body: bodyText,
-              client: match.client,
-              attachments,
-            })
-          : await extractQuoteFromEmail({ subject, from, body: bodyText, attachments });
-
-        if (extractedQuotes.length === 0) {
-          result.failed++;
-          result.errors.push(
-            `Could not extract any quote request from "${subject || messageId}"`
-          );
-        } else {
-          for (const extracted of extractedQuotes) {
-            await insertUnmatchedQuote({
-              owner_id: user.id,
-              sender_email: headerEmail || extracted.client_email,
-              sender_name: extracted.client_name ?? null,
-              subject,
-              gmail_message_id: messageId,
-              parsed_data: extracted as unknown as Json,
-              suggested_client_id: match?.client.id ?? null,
-              suggested_client_source: match?.source ?? null,
-            });
-            if (match) result.suggested++;
-            else result.unmatched++;
-          }
-          result.quotesExtracted += extractedQuotes.length;
-        }
-
-        if (connection.processed_label_id) {
-          await gmail.users.messages.modify({
-            userId: "me",
-            id: messageId,
-            requestBody: { addLabelIds: [connection.processed_label_id] },
-          });
-        }
-
-        result.processed++;
-      } catch (e) {
-        result.failed++;
-        result.errors.push(e instanceof Error ? e.message : "Unknown error processing a message");
-      }
-    }
+    const coreResult = await processGmailMessagesForConnection(connection, clients, messageIds);
 
     revalidatePath("/settings");
     revalidatePath("/review");
-    return result;
+    return coreResult;
   } catch (e) {
     result.errors.push(e instanceof Error ? e.message : "Unknown error");
     return result;

@@ -1261,3 +1261,67 @@ currency either.
   the guard itself (confirmed via grep), and status/invoice-number refresh
   (`refreshInvoiceFromXero`, `checkInvoicesAgainstXero`) doesn't touch
   currency.
+
+## Decision 26: Gmail → Slack automation — auto-trigger, interactive confirm, learn-over-time
+
+Feedback from the user's boss/colleague: quote intake "feels a bit manual."
+Investigation showed most of the automation already existed and just wasn't
+wired to fire itself — `gmail_connections.watched_label_id` and
+`listUnprocessedGmailCandidates()`/`processSelectedGmailMessages()`
+(`app/(app)/settings/actions.ts`) already did label-filtered candidate
+listing and the full match/extract/insert pipeline; the only manual step
+was a human clicking "Check now" in `CheckNowModal.tsx`.
+
+Two ideas were floated (an in-Gmail AI chat widget vs. label→automatic
+processing→Slack notification); the user picked the Slack direction, with
+one addition — confirm/correct the suggested client right in Slack, and get
+smarter over time from corrections. Confirmed early that a Slack button
+can't one-click-create a finished quotation: `ExtractedQuoteRequest` items
+(`lib/email-quote/extractQuoteFromEmail.ts`) only ever have
+`description`/`quantity`, never a price — customers don't state pricing in
+a request — so pricing always needs a human in `/review` regardless of
+whether the client match was right. Slack's job is narrowed to resolving
+that one repetitive question well.
+
+- **Automatic trigger**: `app/api/cron/gmail-check/route.ts`, a Vercel Cron
+  job (`vercel.json`, every 10 min) gated by the previously-vestigial
+  `CRON_SECRET`. Real-time Gmail push (watch + Pub/Sub) was considered and
+  set aside — genuine standing infrastructure (a topic, a webhook, a
+  subscription needing renewal every 7 days) for a latency win that doesn't
+  matter for quote-request emails.
+- **Shared pipeline, no duplication**: extracted the core of
+  `processSelectedGmailMessages` into
+  `lib/email-quote/processGmailMessagesForConnection.ts` — takes the
+  connection/client list as plain data instead of deriving them from a
+  signed-in session, so both the existing "Check now" Server Action (thin
+  wrapper now) and the session-less cron route call the exact same logic.
+  Same fix applied to `insertUnmatchedQuote` (now returns the inserted row's
+  id) so the cron route knows exactly which rows are new without a second
+  query.
+- **Slack notification + inline correction**: `lib/slack/` — a plain
+  `fetch()`-based Web API client (no `@slack/*` dependency needed for two
+  calls), a Block Kit message builder, and HMAC signature verification
+  (`verifySlackRequest`, mirroring `lib/crypto.ts`'s existing use of Node's
+  `crypto`). A new `unmatched_email_quotes` row gets a message with a
+  "✅ Correct" button and a client-picker dropdown — no free-text NLU in v1,
+  a dropdown is simpler to get right and still keeps the correction inside
+  Slack. `app/api/slack/interactions/route.ts` receives the callback,
+  verifies it, and edits the message in place (`chat.update`) — it updates
+  the row's suggested client, **not** a full quotation.
+- **No new Supabase table for Slack credentials**: unlike Gmail/Xero/
+  Salesforce this isn't a per-end-user OAuth integration, just one
+  app-level bot posting to one channel — `SLACK_BOT_TOKEN`/
+  `SLACK_SIGNING_SECRET`/`SLACK_CHANNEL_ID` env vars are the right fit,
+  same tier as `ANTHROPIC_API_KEY`.
+- **Getting smarter over time**: new `email_client_corrections` table
+  (`owner_id`, `sender_email`, `client_id`, unique per owner+sender).
+  Written on every Slack confirm *and* every correction — a repeatedly-
+  confirmed sender is just as trustworthy as a corrected one. Checked as a
+  new **Tier 0** in `processGmailMessagesForConnection`, before the
+  original 3-tier matcher (`findClientByEmail` → `fuzzyMatchClient` →
+  extraction) — an exact hit here is strictly more reliable than a fresh
+  guess and short-circuits the rest of the pipeline, so a corrected sender
+  is deterministically matched (no AI call) from the next email onward.
+  Feeding recent corrections as few-shot examples into `fuzzyMatchClient`'s
+  prompt was considered for new senders but deferred — not worth doing
+  against an empty table on day one.
