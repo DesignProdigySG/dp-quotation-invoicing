@@ -181,6 +181,55 @@ of standing assignments is still worth having as a backstop.
 ## Known blocker for whoever picks this up
 
 This session's Supabase MCP connection only had access to a different, unrelated
-project ("Intelligent Automation Pipeline", `ssbdlttcyogtcowvcbaj`) — not this
+project ("Intelligent Automation Pipeline", `ssbdlttcyogtcowvcbaj`), not this
 app's real project (`gkkwxjxdcifjuwxgdpug`). Confirm proper project access before
 attempting any schema work here.
+
+## Follow-up: graph vs. classification, worked through concretely
+
+A later conversation dug further into *when* the drift-detection idea above
+would actually need graph-style reasoning, using a concrete scenario: Hyunji (a
+contact at a client's "BU Alpha") requests a top-up for "BU Alpha 2026 Q3 paid
+media budget," then in August a LinkedIn invoice arrives saying money was spent
+on a "Product Y campaign" — does anything need a graph to connect those two?
+
+**The distinguishing test that emerged:** if "Product Y belongs to BU Alpha" is a
+fact someone could just state and record directly (e.g. tag the pool with
+"Product Y" as a known keyword), matching the invoice to the pool is still plain
+**classification** — one document's content compared against a list of
+candidates, the same mechanism already used for client/vendor/PO matching
+elsewhere in this app. It only becomes genuinely **graph-shaped** when that
+connection *isn't* stated anywhere and has to be assembled from several
+independently-weak signals across *separate records* that converge (e.g. Hyunji
+is the requester on both this and three prior invoices already resolved to BU
+Alpha, the amount roughly matches the remaining balance, the timing lines up) —
+pattern-matching across a network, not a single lookup.
+
+**Where the real burden sits, once you go that route:** most of that evidence is
+free — a byproduct of work already happening (who requested what, prior human
+resolutions, the computed ledger balance), not new admin. The one real,
+unavoidable cost is seeding the first connection (e.g. "this email belongs to BU
+Alpha") somewhere, once — and if naming conventions are inconsistent enough that
+nothing lines up ever, no amount of pattern-matching conjures structure from pure
+noise. This is also why "a human always confirms before anything finalizes" (the
+pattern this whole app already uses) isn't just a safety net — every resolved
+claim becomes future evidence the next claim gets matched against.
+
+**Conclusion — is this the right case to build a graph layer on, even just to
+learn on?** Probably not, and it would be overfitting a problem to a solution to
+force it: the interesting graph query (triangulating weak evidence across many
+resolved claims) doesn't exist yet on day one — it needs months of real history
+to even be exercised — and this is real money for a real company, a bad place to
+be learning by doing. If there's still a genuine desire to build with graph tech
+(there is), two better-fitting options surfaced:
+1. Practice on this *domain* with **synthetic, offline data** — seeded vendor/
+   claim/resolution history shaped like this business, never wired to the live
+   app, so neither the cold-start problem nor the "disjoint from the AR
+   database" concern apply (it was never trying to sync with production).
+2. Apply graph tech to a **different, already-graph-shaped part of the actual
+   business**: the "find a warm connection to someone outside your network"
+   idea raised earlier (who-knows-whom, useful for BD/partnerships). That data
+   already exists today, it's a traversal problem from day one (no cold start),
+   and a wrong connection-suggestion is low-stakes compared to misrouting money
+   — genuinely useful *and* a legitimate reason to stand up graph
+   infrastructure, rather than manufactured practice on the money ledger.
