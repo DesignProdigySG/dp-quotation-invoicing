@@ -114,7 +114,90 @@ other session or agent.
   the cron job were superseded by the in-app pipeline above); harmless to leave, fine
   to remove later
 
+## Staging environment & migration workflow (planned, blocked on a Supabase plan upgrade)
+
+Today there is **one** Supabase project (`gkkwxjxdcifjuwxgdpug`), used by both
+Vercel Production and Preview deployments — every migration and every Preview
+deployment hits the same live data. A separate staging project is planned so
+Preview can be tested against without touching production. **Not yet done** —
+the account behind this project's Supabase org has already used both of its
+free-project slots (this project, plus a separate `Intelligence Automation
+Pipeline` project under a different org, same account), so creating a
+staging project requires upgrading `DP Daily Ops Org` (or another org) to
+the Supabase Pro plan first — a billing action, not something any tool/agent
+can do. Once that happens:
+
+- **Setup**: create a second free-standing project in the same org (not
+  Supabase's native Git-branching feature — that also needs Pro plus
+  per-branch compute cost and a CLI migrations workflow this repo doesn't
+  have yet; a plain second project synced by hand is simpler and cheaper for
+  where this project is today). Reconstruct its schema to exactly match
+  production — 13 tables (all RLS-enabled), 3 storage buckets
+  (`external-quotes`, `feedback-images`, `signatures`, all private), 3
+  trigger functions (`set_invoice_number`, `set_quote_number`,
+  `set_updated_at`), 5 triggers, ~30 RLS policies — generated from
+  production's own `pg_catalog` (`pg_get_constraintdef`/`pg_get_functiondef`/
+  `pg_policies.qual`) rather than hand-retyped, so it's exact. Then start a
+  `supabase/migrations/` directory (this repo has never had one — every
+  migration to date went straight against production via
+  `mcp__Supabase__apply_migration`, no git-tracked file) and split Vercel's
+  `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`/
+  `SUPABASE_SERVICE_ROLE_KEY` so **Preview** points at staging and
+  **Production** keeps pointing at the current project.
+
+- **Ongoing workflow once it exists** — the discipline this whole approach
+  depends on, since nothing enforces it automatically the way paid branching
+  would:
+  1. Write every schema change as a file under `supabase/migrations/`.
+  2. Apply + test it on **staging** first (via `apply_migration` against
+     the staging project, then exercise it through a Preview deployment).
+  3. Once confirmed good, apply the **identical SQL** to **production**.
+  4. To check how far behind prod is at any point, diff
+     `mcp__Supabase__list_migrations` between the two project ids — that's
+     the actual tracked history, not something to keep in memory.
+  5. **Call out destructive migrations explicitly** before applying them to
+     prod (`DROP COLUMN`/`DROP TABLE`, lossy type changes, anything that
+     deletes data) — cheap preventive habit, distinct from and in addition
+     to the rollback options below, not a substitute for them.
+
+- **Rollback, if a migration breaks prod anyway**:
+  - Additive changes (this project's history so far — adding nullable
+    columns) roll back cheaply: just apply the reverse SQL
+    (`DROP COLUMN`, etc.).
+  - Destructive changes that actually lost data need a real restore. Once
+    on Pro, Supabase takes **daily backups automatically, 7-day
+    retention, no setup or extra cost** — restorable from the dashboard.
+    This reverts the *entire* database to that snapshot (any real rows
+    written since are lost too) and causes downtime while restoring, so
+    it's a last resort, not a quick undo. Point-in-Time Recovery (an
+    optional paid add-on, ~$100+/mo at the smallest retention tier) gives
+    second-level recovery instead of once-daily if that gap is ever a real
+    concern — not needed at this project's transaction volume today.
+  - **Storage objects are not covered by database backups at all** — the
+    DB only stores metadata about files (`storage.objects`), the actual
+    bytes live in a separate S3-compatible layer. If those buckets'
+    contents ever need backing up, Storage exposes its own S3-compatible
+    endpoint (**Project Settings → Storage → S3 Configuration → Access
+    keys**) that `rclone`/the AWS CLI can copy from
+    (`https://<project-ref>.storage.supabase.co/storage/v1/s3`). Not worth
+    automating yet given how little sits in those buckets (a signature per
+    user, occasional uploaded documents) — a one-off `rclone copy` before
+    anything genuinely risky is enough for now.
+
+- **Known gap this approach doesn't close**: `gmail_connections`/
+  `xero_connections`/`salesforce_connections` store live OAuth tokens as
+  rows in the database, not as env vars — staging starts with none of them
+  connected, so testing Gmail/Xero/Salesforce-integrated features on
+  Preview will need reconnecting each one separately against staging.
+  Storage bucket contents (signatures, uploaded quote files) also start
+  empty on staging. Neither blocks testing core CRUD/business-logic
+  features.
+
 ## What's next (confirmed priorities, in order)
+
+**0. Staging Supabase project.** Blocked on the user upgrading a Supabase
+org to Pro (see "Staging environment & migration workflow" above for the
+full plan) — pick this up first once that's done.
 
 **1. "View in Xero" deep link.** The last open Xero v1 fast-follow — a link
 on the invoice detail page straight to the invoice in Xero once pushed
