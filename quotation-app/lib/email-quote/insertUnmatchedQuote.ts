@@ -6,6 +6,7 @@ export async function insertUnmatchedQuote(input: {
   sender_email: string;
   sender_name?: string | null;
   subject?: string | null;
+  gmail_message_id?: string | null;
   parsed_data: Json;
   suggested_client_id?: string | null;
   suggested_client_source?: string | null;
@@ -16,6 +17,7 @@ export async function insertUnmatchedQuote(input: {
     sender_email: input.sender_email,
     sender_name: input.sender_name ?? null,
     subject: input.subject ?? null,
+    gmail_message_id: input.gmail_message_id ?? null,
     parsed_data: input.parsed_data,
     suggested_client_id: input.suggested_client_id ?? null,
     suggested_client_source: input.suggested_client_source ?? null,

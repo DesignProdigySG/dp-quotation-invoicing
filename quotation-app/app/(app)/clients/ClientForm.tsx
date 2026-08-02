@@ -29,6 +29,7 @@ export default function ClientForm({
     ai_instructions: string;
     default_currency: string;
     default_gst_rate: number;
+    default_payment_terms_days: number | null;
     display_currency_preference: "original" | "sgd";
     salesforce_account_id: string | null;
   };
@@ -41,6 +42,7 @@ export default function ClientForm({
     ai_instructions: initial?.ai_instructions || "",
     default_currency: initial?.default_currency || "SGD",
     default_gst_rate: initial?.default_gst_rate ?? 9,
+    default_payment_terms_days: initial?.default_payment_terms_days ?? null,
     display_currency_preference:
       (initial?.display_currency_preference as "original" | "sgd") || "original",
     salesforce_account_id: initial?.salesforce_account_id ?? null,
@@ -138,6 +140,22 @@ export default function ClientForm({
             value={form.default_gst_rate}
             onChange={(e) =>
               setForm({ ...form, default_gst_rate: Number(e.target.value) })
+            }
+          />
+        </div>
+        <div>
+          <label htmlFor="default_payment_terms_days">Default payment terms (days)</label>
+          <input
+            id="default_payment_terms_days"
+            type="number"
+            step="1"
+            value={form.default_payment_terms_days ?? ""}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                default_payment_terms_days:
+                  e.target.value === "" ? null : Number(e.target.value),
+              })
             }
           />
         </div>

@@ -15,12 +15,14 @@ export default function QuoteActions({
   salesforceQuoteId,
   salesforceQuoteNumber,
   salesforcePushError,
+  sourceFilePath,
 }: {
   quoteId: string;
   status: string;
   salesforceQuoteId: string | null;
   salesforceQuoteNumber: string | null;
   salesforcePushError: string | null;
+  sourceFilePath: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -84,7 +86,10 @@ export default function QuoteActions({
   }
 
   function handlePdfClick(e: React.MouseEvent<HTMLAnchorElement>) {
-    if (!salesforceQuoteId) {
+    // No nudge for an externally-sourced quotation — it was never going to
+    // get a Salesforce number, so the warning would be permanently (and
+    // confusingly) shown for every one of these.
+    if (!salesforceQuoteId && !sourceFilePath) {
       const proceed = confirm(
         "This quotation hasn't been pushed to Salesforce yet — the PDF won't have the official quote number. Download anyway?"
       );
@@ -136,7 +141,7 @@ export default function QuoteActions({
             Convert to invoice
           </button>
         )}
-        {!salesforceQuoteId && (
+        {!salesforceQuoteId && !sourceFilePath && (
           <button className="btn" disabled={busy} onClick={pushToSalesforce}>
             Push to Salesforce
           </button>

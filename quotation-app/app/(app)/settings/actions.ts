@@ -17,6 +17,7 @@ import { fuzzyMatchClient } from "@/lib/email-quote/fuzzyMatchClient";
 import { extractQuoteFromEmail } from "@/lib/email-quote/extractQuoteFromEmail";
 import { extractQuoteWithClientContext } from "@/lib/email-quote/extractQuoteWithClientContext";
 import { insertUnmatchedQuote } from "@/lib/email-quote/insertUnmatchedQuote";
+import { collectAttachmentParts, fetchAttachmentContentBlocks } from "@/lib/email-quote/gmailAttachments";
 import type { Json } from "@/types/database.types";
 import { getXeroClientForConnection } from "@/lib/xero/client";
 import { listTaxRates, listAccounts } from "@/lib/xero/settings";
@@ -328,6 +329,7 @@ export async function disconnectSalesforce(): Promise<{ error?: string }> {
 
 export type ProcessSelectedResult = {
   processed: number;
+  quotesExtracted: number;
   suggested: number;
   unmatched: number;
   failed: number;
@@ -339,6 +341,7 @@ export async function processSelectedGmailMessages(
 ): Promise<ProcessSelectedResult> {
   const result: ProcessSelectedResult = {
     processed: 0,
+    quotesExtracted: 0,
     suggested: 0,
     unmatched: 0,
     failed: 0,
@@ -383,6 +386,12 @@ export async function processSelectedGmailMessages(
         const from = headers.find((h) => h.name === "From")?.value || "";
         const bodyText = decodeBody(message.payload);
 
+        const attachmentParts = collectAttachmentParts(message.payload);
+        const attachments =
+          attachmentParts.length > 0
+            ? await fetchAttachmentContentBlocks(gmail, messageId, attachmentParts)
+            : [];
+
         // Tier 1: deterministic (exact email, then same-domain fallback).
         const headerEmail = parseSenderEmail(from);
         let match: {
@@ -399,20 +408,41 @@ export async function processSelectedGmailMessages(
           }
         }
 
-        // Tier 3: extraction — tailored if a client was identified, generic otherwise.
-        const extracted = match
-          ? await extractQuoteWithClientContext({ subject, from, body: bodyText, client: match.client })
-          : await extractQuoteFromEmail({ subject, from, body: bodyText });
+        // Tier 3: extraction — tailored if a client was identified, generic
+        // otherwise. Returns an array: a single email (plus any attached
+        // images/PDFs) can contain more than one distinct quote request.
+        const extractedQuotes = match
+          ? await extractQuoteWithClientContext({
+              subject,
+              from,
+              body: bodyText,
+              client: match.client,
+              attachments,
+            })
+          : await extractQuoteFromEmail({ subject, from, body: bodyText, attachments });
 
-        await insertUnmatchedQuote({
-          owner_id: user.id,
-          sender_email: headerEmail || extracted.client_email,
-          sender_name: extracted.client_name ?? null,
-          subject,
-          parsed_data: extracted as unknown as Json,
-          suggested_client_id: match?.client.id ?? null,
-          suggested_client_source: match?.source ?? null,
-        });
+        if (extractedQuotes.length === 0) {
+          result.failed++;
+          result.errors.push(
+            `Could not extract any quote request from "${subject || messageId}"`
+          );
+        } else {
+          for (const extracted of extractedQuotes) {
+            await insertUnmatchedQuote({
+              owner_id: user.id,
+              sender_email: headerEmail || extracted.client_email,
+              sender_name: extracted.client_name ?? null,
+              subject,
+              gmail_message_id: messageId,
+              parsed_data: extracted as unknown as Json,
+              suggested_client_id: match?.client.id ?? null,
+              suggested_client_source: match?.source ?? null,
+            });
+            if (match) result.suggested++;
+            else result.unmatched++;
+          }
+          result.quotesExtracted += extractedQuotes.length;
+        }
 
         if (connection.processed_label_id) {
           await gmail.users.messages.modify({
@@ -423,8 +453,6 @@ export async function processSelectedGmailMessages(
         }
 
         result.processed++;
-        if (match) result.suggested++;
-        else result.unmatched++;
       } catch (e) {
         result.failed++;
         result.errors.push(e instanceof Error ? e.message : "Unknown error processing a message");

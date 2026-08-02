@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { addDaysToDateString } from "@/lib/format";
@@ -8,6 +9,11 @@ import { getSalesforceClientForConnection } from "@/lib/salesforce/client";
 import { findOrCreateSalesforceAccount } from "@/lib/salesforce/accounts";
 import { findOpportunityFieldByLabel } from "@/lib/salesforce/opportunityFields";
 import { generateQuotationTitle } from "@/lib/salesforce/generateQuotationTitle";
+import {
+  extractQuotationFromDocument,
+  type ExtractedQuotationDocument,
+} from "@/lib/email-quote/extractQuotationFromDocument";
+import type { AttachmentContentBlock } from "@/lib/email-quote/gmailAttachments";
 
 export type LineItemInput = {
   description: string;
@@ -29,6 +35,13 @@ export type QuotationInput = {
   internal_notes?: string | null;
   valid_until?: string | null;
   title?: string | null;
+  // Only relevant for a quotation imported from an externally-built
+  // document (see extractQuotationFromUpload below) — normal
+  // create/edit flows never set either. quote_number is otherwise never
+  // user-editable; Decision 17 made Salesforce push the sole writer of it
+  // for a normal quotation.
+  quote_number?: string | null;
+  external_quote_file_path?: string | null;
   line_items: LineItemInput[];
 };
 
@@ -59,6 +72,8 @@ export async function createQuotation(input: QuotationInput) {
       internal_notes: input.internal_notes || null,
       valid_until: validUntil,
       title: input.title || null,
+      quote_number: input.quote_number || null,
+      external_quote_file_path: input.external_quote_file_path || null,
     })
     .select()
     .single();
@@ -102,6 +117,8 @@ export async function updateQuotation(id: string, input: QuotationInput) {
       internal_notes: input.internal_notes || null,
       valid_until: input.valid_until ?? null,
       title: input.title || null,
+      quote_number: input.quote_number || null,
+      external_quote_file_path: input.external_quote_file_path || null,
     })
     .eq("id", id);
   if (error) throw new Error(error.message);
@@ -234,11 +251,18 @@ export async function convertQuotationToInvoice(quotationId: string) {
 
   const { data: quotation, error: qError } = await supabase
     .from("quotations")
-    .select("*, quotation_line_items(*)")
+    .select("*, quotation_line_items(*), clients(default_payment_terms_days)")
     .eq("id", quotationId)
     .single();
 
   if (qError || !quotation) throw new Error(qError?.message || "Quote not found");
+
+  const client = (quotation as any).clients as {
+    default_payment_terms_days: number | null;
+  } | null;
+  const dueDate = client?.default_payment_terms_days
+    ? addDaysToDateString(quotation.quote_date, client.default_payment_terms_days)
+    : null;
 
   const { data: invoice, error: invError } = await supabase
     .from("invoices")
@@ -255,6 +279,7 @@ export async function convertQuotationToInvoice(quotationId: string) {
       billing_address: quotation.billing_address,
       notes: quotation.notes,
       internal_notes: quotation.internal_notes,
+      due_date: dueDate,
     })
     .select()
     .single();
@@ -328,6 +353,12 @@ export async function pushQuotationToSalesforce(
 
   if (quotation.salesforce_quote_id) {
     return { error: "This quotation has already been pushed to Salesforce" };
+  }
+
+  if (quotation.external_quote_file_path) {
+    return {
+      error: "This quotation was imported from an external file and can't be pushed to Salesforce.",
+    };
   }
 
   const client = (quotation as any).clients as {
@@ -459,5 +490,91 @@ export async function pushQuotationToSalesforce(
     return {};
   } catch (e) {
     return await recordFailure(e instanceof Error ? e.message : "Failed to push to Salesforce");
+  }
+}
+
+const ALLOWED_IMPORT_FILE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+];
+const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+
+export type ExtractedQuotationForImport = ExtractedQuotationDocument & {
+  suggested_client_id: string | null;
+  source_file_path: string;
+};
+
+// Never throws — same convention as the other Settings/quote actions.
+// Extracts a priced quotation document (built outside this app) into a
+// prefill for the "new quotation" form. Nothing is written to the database
+// here — the user still reviews and explicitly saves via the normal
+// createQuotation path, same as every other quotation creation route.
+export async function extractQuotationFromUpload(
+  formData: FormData
+): Promise<{ error?: string; data?: ExtractedQuotationForImport }> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "Not signed in" };
+
+    const file = formData.get("file");
+    if (!(file instanceof File)) return { error: "No file provided" };
+    if (!ALLOWED_IMPORT_FILE_TYPES.includes(file.type)) {
+      return { error: "The file must be a PNG, JPG, GIF, WEBP, or PDF" };
+    }
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      return { error: "The file must be under 10MB" };
+    }
+
+    // Keep the original file on record — this quotation is sourced from an
+    // externally-built document, not Salesforce, so the document itself is
+    // the closest thing to a "quote number of record" it has. Same bucket
+    // and path convention as invoices/actions.ts's uploadExternalQuoteFile.
+    const sourceFilePath = `${user.id}/${randomUUID()}-${file.name}`;
+    const { error: uploadError } = await supabase.storage
+      .from("external-quotes")
+      .upload(sourceFilePath, file, { contentType: file.type });
+    if (uploadError) return { error: uploadError.message };
+
+    const bytes = Buffer.from(await file.arrayBuffer()).toString("base64");
+    const attachment: AttachmentContentBlock =
+      file.type === "application/pdf"
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: bytes } }
+        : {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: file.type as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: bytes,
+            },
+          };
+
+    const extracted = await extractQuotationFromDocument(attachment);
+    if (!extracted) {
+      return { error: "Could not extract a quotation from this file — try a clearer copy." };
+    }
+
+    let suggestedClientId: string | null = null;
+    if (extracted.client_name) {
+      const { data: clients } = await supabase.from("clients").select("id, name");
+      const normalized = extracted.client_name.trim().toLowerCase();
+      const match = (clients || []).find((c) => c.name.trim().toLowerCase() === normalized);
+      suggestedClientId = match?.id ?? null;
+    }
+
+    return {
+      data: {
+        ...extracted,
+        suggested_client_id: suggestedClientId,
+        source_file_path: sourceFilePath,
+      },
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Failed to extract the file" };
   }
 }

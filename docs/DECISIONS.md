@@ -1061,3 +1061,203 @@ Three follow-up asks from the same conversation as Decision 19:
   with a tooltip until `xeroInvoiceId` is set. `DocumentPdf.tsx` itself is
   left untouched (still shared with quotes) — only the invoice route
   stopped calling it.
+
+## Decision 21: Vision/attachment extraction, multi-quote emails, and manual quotation-document import
+
+Scoped to the quote-request pipeline only (not the PO pipeline, which is a
+structural duplicate and can get the same treatment later without a
+redesign — confirmed explicitly with the user). Three pieces, designed
+together since the first two share one root cause:
+
+- **Attachment vision extraction**: Gmail's `format: "full"` fetch (already
+  used by `processSelectedGmailMessages`) already returns each attachment
+  part's `mimeType`/`filename`/`attachmentId` — it was simply discarded by
+  `decodeBody()`'s text-only walk. New `lib/email-quote/gmailAttachments.ts`
+  walks the MIME tree for allowed types (matching the existing
+  `uploadExternalQuoteFile` allow-list: PNG/JPG/GIF/WEBP/PDF, capped at 3
+  attachments and 10MB each), then fetches bytes via
+  `gmail.users.messages.attachments.get()` — a new call, but one already
+  covered by the existing `gmail.readonly` OAuth scope, no reconnect
+  needed — and converts them into Anthropic `image`/`document` content
+  blocks (base64url → base64 re-encoding, same conversion `decodeBody()`
+  already does for text parts).
+- **Multi-quote-per-email**: `extractQuoteFromEmail`/
+  `extractQuoteWithClientContext` now return `ExtractedQuoteRequest[]`
+  instead of a single object — the prompt asks the model to identify every
+  distinct quote request in the email body *and* any attachments (e.g.
+  several unrelated screenshots), rather than assuming exactly one.
+  `processSelectedGmailMessages`'s per-message loop now inserts one
+  `unmatched_email_quotes` row per array entry instead of one per message.
+  **No change was needed in `ReviewQueue.tsx`** — it already maps rows to
+  cards generically, so N rows from one email just show as N cards. A new
+  nullable `gmail_message_id` column was added to `unmatched_email_quotes`
+  (stamped on every row from a given message) purely for traceability,
+  since nothing tied multiple rows back to one source email before.
+- **Model choice**: text-only extraction keeps the existing
+  `claude-haiku-4-5-20251001`; when attachments are present, both
+  extractors switch to `claude-sonnet-5` (vision accuracy matters enough to
+  justify it, matching the same reasoning Decision 8 already used for
+  `extractQuoteWithClientContext`'s Haiku→Sonnet tier) — `temperature` is
+  omitted on the Sonnet path since that model rejects an explicit override,
+  same known constraint as `extractQuoteWithClientContext`.
+- **Manual quotation-document import** (a separate flow, not Gmail-based):
+  a new `/quotes/import` page lets someone upload a PDF/image of a
+  quotation built outside the app. New `extractQuotationFromDocument`
+  (`lib/email-quote/`) uses its own schema/prompt — deliberately not reusing
+  the quote-*request* extractor, since this document is already priced
+  (line items carry `unit_price`, not just quantity) and can carry
+  currency/GST/dates. New `extractQuotationFromUpload` server action
+  (`quotes/actions.ts`) validates the file (same allow-list/size cap as
+  above), extracts it, and does a simple case-insensitive exact-name match
+  against existing clients to suggest one — nothing is written to the
+  database at this step. The extracted data prefills `QuoteForm` in create
+  mode (`ImportQuoteForm.tsx`) so the user reviews and explicitly saves,
+  same human-in-the-loop pattern used everywhere else in this app (nothing
+  is ever auto-created from an AI extraction without a save click).
+
+## Decision 22: Externally-sourced quotations replace the invoice "external quote" flow
+
+Realized once `/quotes/import` existed (Decision 21) that the "New Invoice"
+→ "Was a quotation for this invoice generated outside the app?" → "Yes"
+flow (Decision 13) was the wrong shape: it only asked for a quote number
+and stored the uploaded file as an inert attachment, with every invoice
+line item still typed by hand. Confirmed with the user directly: "Yes"
+should instead scan the uploaded document into a real quotation (client,
+line items, quote number, original file), which then goes through the
+normal "Convert to invoice" button — one consistent path, not two
+similar-but-different ones.
+
+- **New `quotations.external_quote_file_path`** (nullable text) — mirrors
+  `invoices.external_quote_file_path`'s naming/shape (Decision 13). Its
+  mere presence *is* the "externally-sourced, scanned quotation" signal,
+  no separate boolean column, same convention as `invoices.quotation_id`
+  presence already meaning "came from a conversion."
+- **`extractQuotationFromDocument` gained an optional `quote_number`** —
+  the source document's own reference number becomes this quotation's
+  number; there's no Salesforce push involved for this kind of quotation
+  at all.
+- **`extractQuotationFromUpload` now also uploads the file** to the
+  existing private `external-quotes` bucket (same path convention as
+  `uploadExternalQuoteFile`) and returns the path — the original document
+  is kept on record, not discarded after extraction.
+- **`pushQuotationToSalesforce` rejects outright** if
+  `external_quote_file_path` is set (defense in depth — the button is also
+  hidden). This kind of quotation has no real SFDC-driven number and isn't
+  a normal sales-pipeline quote.
+- **The quote PDF route redirects to the original file** (a signed URL
+  from the `external-quotes` bucket) instead of self-rendering via
+  `DocumentPdf` when `external_quote_file_path` is set — the real document
+  already exists, re-typing a guess at it would be worse, not better.
+- **`QuoteForm.tsx` gained an editable "Quotation number" field**, shown
+  only when an external quote file is present (create, via a new
+  `sourceFilePath` prop from `ImportQuoteForm`, or edit, via
+  `initial.external_quote_file_path`) — otherwise `quote_number` stays
+  exactly as before: never user-editable, Salesforce push is its sole
+  writer (Decision 17).
+- **The Decision-19 "not pushed to Salesforce yet" PDF confirm dialog is
+  suppressed** for these quotations too — it would otherwise fire on every
+  single one, since `salesforceQuoteId` is never set for this kind.
+- **`NewInvoiceButton.tsx`'s "Yes" now navigates to `/quotes/import`**
+  instead of `/invoices/new?externalQuote=yes`. Deliberately **not**
+  auto-chaining straight to an invoice after saving — the user lands on
+  the new quotation and clicks "Convert to invoice" themselves, keeping a
+  human review step between "here's what got scanned" and "this is now a
+  real invoice," consistent with every other AI-extraction flow in this
+  app.
+- **The old `externalQuote=yes` code path is left in place, not deleted**
+  — unreachable from the UI now, but stays schema-compatible and keeps any
+  already-created invoices' detail-page display (and their "Attach
+  quotation file" retry control) working exactly as before. Lower risk to
+  leave inert code than to touch something with real historical data
+  behind it.
+
+## Decision 23: Fix small Gmail attachments never reaching the vision extractor
+
+Real-world test: an email with a small image attachment landed in Needs
+Review with a quote whose `notes` explained it saw "no readable item
+details," reasoning only from the subject line — the image never made it
+to Claude at all.
+
+Root cause, confirmed directly from Gmail API's own type docs
+(`node_modules/googleapis/build/src/apis/gmail/v1.d.ts`,
+`Schema$MessagePartBody`): "When present, `attachmentId` contains the ID
+of an external attachment... When not present, the entire content of the
+message part body is contained in the `data` field." `gmailAttachments.ts`'s
+`collectAttachmentParts()` only recognized a part as a candidate when
+`body.attachmentId` was present — Gmail is free to inline a small
+attachment's bytes directly in `body.data` instead (exactly what a small
+test image is likely to get), so that part was silently invisible: never
+collected, never fetched, never sent to the model.
+
+- `CandidateAttachment` gained an `inlineData?: string | null` alongside a
+  now-optional `attachmentId` — mutually exclusive per Gmail's own
+  contract.
+- `collectAttachmentParts()` now accepts a part with an allowed `mimeType`
+  if it has *either* `body.attachmentId` or `body.data`.
+- `fetchAttachmentContentBlocks()`: only calls
+  `gmail.users.messages.attachments.get()` when `attachmentId` is set;
+  otherwise uses `inlineData` directly — no extra API call needed, the
+  bytes are already in hand from the original `format: "full"` fetch.
+- No other files changed — `processSelectedGmailMessages` just calls these
+  two functions and passes the result through, indifferent to which path
+  supplied the bytes.
+
+## Decision 24: Client default payment terms drive invoice due-date defaulting
+
+Clients often have a standard payment term (e.g. "net 30"), and the "Due
+date" field on an invoice was always blank by default, requiring manual
+entry every time. Added a nullable `clients.default_payment_terms_days`
+column and used it to pre-fill "Due date" wherever an invoice is created.
+
+- `ClientForm.tsx`: new "Default payment terms (days)" number field next
+  to Default GST %, nullable (blank means no default).
+- `InvoiceForm.tsx` (manual "New invoice" flow): when the client dropdown
+  changes (or on initial load, since the first client is pre-selected),
+  "Due date" is set to today + that client's `default_payment_terms_days`
+  via the existing `addDaysToDateString` helper — unconditionally
+  overwritten on client change, same convention already used there for
+  currency/GST rate/billing address. A client with no payment terms set
+  clears the field back to blank. The user can still edit the date by hand
+  afterward; it's a normal controlled input.
+- `convertQuotationToInvoice` (`quotes/actions.ts`): now joins
+  `clients(default_payment_terms_days)` and sets the new invoice's
+  `due_date` to the quotation's own `quote_date` plus that many days (same
+  "base date + N days" pattern already used for `valid_until` in
+  `createQuotation`), or `null` if the client has no payment terms set.
+- No changes needed in `invoices/actions.ts`'s `createInvoice` — it already
+  takes `due_date` verbatim from the form, which now simply arrives
+  pre-filled.
+
+## Decision 25: Multi-currency Xero invoice push
+
+Decision 5 deliberately scoped Xero push to SGD-only in v1 — not a
+technical limitation, but because this app's `exchange_rate` field on an
+invoice is a manual, optional, PDF-display number with no guarantee it
+matches a rate Xero would consider correct/current. That decision framed
+it as a fast-follow once SGD push was proven, not a permanent cut, and it
+was the next confirmed priority.
+
+Turned out to be a very small change: the entire SGD restriction was one
+guard + one hardcode in `lib/xero/buildInvoicePayload.ts`. GST/tax handling
+is percentage-based against the org's configured Xero tax type, so it's
+already currency-agnostic; `findOrCreateXeroContact` never touches
+currency either.
+
+- `buildInvoicePayload.ts`: replaced the `currency !== "SGD"` guard with a
+  lookup against `xero-node`'s own `CurrencyCode` enum (case-insensitive),
+  throwing a clear error for anything the enum doesn't recognize instead of
+  letting an invalid currency string reach Xero's API opaquely.
+- Added `exchange_rate` to the `InvoiceForXero` type and set it as the
+  payload's `currencyRate` when present. When absent (the field is
+  optional/unvalidated in `InvoiceForm.tsx`, and nullable in the DB), it's
+  simply omitted — `xero-node`'s own docs say Xero falls back to its XE.com
+  day rate in that case, so there was no need to add new UI validation
+  requiring a rate before push; Xero already tolerates exactly the "we
+  don't have a trustworthy rate" case Decision 5 was worried about.
+- `pushInvoiceToXero` (`invoices/actions.ts`) now forwards
+  `invoice.exchange_rate` into the payload builder call — it was already
+  fetched on the invoice row but never passed through before.
+- No changes needed anywhere else: no UI gates on currency existed beyond
+  the guard itself (confirmed via grep), and status/invoice-number refresh
+  (`refreshInvoiceFromXero`, `checkInvoicesAgainstXero`) doesn't touch
+  currency.

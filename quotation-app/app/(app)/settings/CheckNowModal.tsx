@@ -83,8 +83,8 @@ export default function CheckNowModal({
         {result ? (
           <>
             <div className="notice">
-              Checked {result.processed} email(s): {result.suggested} with a suggested
-              client, {result.unmatched} unmatched
+              Checked {result.processed} email(s), extracted {result.quotesExtracted} quote(s):{" "}
+              {result.suggested} with a suggested client, {result.unmatched} unmatched
               {result.failed ? `, ${result.failed} failed` : ""} — all sent to Needs
               Review.
             </div>

@@ -264,6 +264,7 @@ export async function pushInvoiceToXero(invoiceId: string): Promise<{ error?: st
         due_date: invoice.due_date,
         reference: invoice.reference,
         currency: invoice.currency,
+        exchange_rate: invoice.exchange_rate,
         gst_applicable: invoice.gst_applicable,
         gst_rate: invoice.gst_rate,
       },
