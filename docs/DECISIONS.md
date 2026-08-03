@@ -1487,3 +1487,17 @@ rather than just working around its cost.
   auto-pause/delete, wrong for a long-lived staging environment) and split
   Vercel's Preview env vars to point at it. Documented as the immediate
   next step in `docs/HANDOFF.md`.
+
+**Follow-up, same day**: user finished the dashboard steps (repo + working
+directory + both toggles). Created the `staging` branch via
+`mcp__Supabase__create_branch` — it bootstraps automatically from
+production's current schema, confirmed via `list_tables` (all 14 tables,
+RLS on, empty). One nuance surfaced: the branch came back
+`persistent: false`, and neither the Management API (no flag exposed on
+create) nor this session (no CLI available) could set it explicitly — noted
+in `docs/HANDOFF.md` as a known gap, with the practical read that it
+shouldn't matter much (nothing created it via a PR, so it shouldn't be
+auto-*deleted*; auto-*pausing* after inactivity is possible but just adds
+latency on the next request, not data loss). Only remaining step is
+Vercel-side and has to be done by the user directly: splitting Preview's
+Supabase env vars from Production's.

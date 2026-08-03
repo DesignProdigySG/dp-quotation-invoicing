@@ -214,21 +214,40 @@ actual risk (forgetting to keep two databases in sync), not just the
   content for that. **Every migration from `20260802125312`
   (`gmail_slack_automation`) onward is real, runnable SQL**, and everything
   from here forward will be too.
-- ⬜ **Still needed, dashboard-only** (Integrations page, same place as the
-  authorization step): pick this repo (`DesignProdigySG/dp-quotation-invoicing`),
-  set the **Working directory** to `quotation-app` (that's where `supabase/`
-  actually lives — the repo root is the monorepo-style parent, not the app
-  itself), and enable both **Automatic branching** and **Deploy to
-  production**.
-- ⬜ **Still needed**: create a **persistent** branch (not an ephemeral
-  per-PR preview branch — those auto-pause/delete, wrong for a long-lived
-  staging environment) named e.g. `staging`, then split Vercel's
-  `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`/
-  `SUPABASE_SERVICE_ROLE_KEY` so **Preview** points at that branch's own
-  credentials and **Production** keeps pointing at the main project. Once
-  the branch exists, uncomment and fill in `[remotes.staging]` in
-  `config.toml` with its project ref, so future config (not just schema)
-  changes sync to it too.
+- ✅ Repo connected (**Integrations** page): `DesignProdigySG/dp-quotation-invoicing`,
+  **Working directory** `quotation-app`, **Automatic branching** and
+  **Deploy to production** both on.
+- ✅ Branch `staging` created (project ref `zisxldwvwwddyuorbhnb`,
+  `https://zisxldwvwwddyuorbhnb.supabase.co`), bootstrapped automatically
+  from production's schema at creation time — confirmed via `list_tables`:
+  all 14 tables present (13 original + `email_client_corrections` from this
+  session), RLS enabled on all of them, 0 rows. `[remotes.staging]` in
+  `config.toml` points at it, so future `config.toml` changes (not just
+  migrations) sync there too, the same as production.
+  - **Known gap**: it came back from the Management API as
+    `persistent: false`. Since nothing created it via a PR, it shouldn't be
+    auto-*deleted* the way a merged/closed PR's preview branch would be —
+    but it may still auto-*pause* after a stretch of inactivity (harmless;
+    it just wakes up on the next request, maybe with a moment's delay).
+    If that's ever actually annoying, the Branches page in the dashboard
+    reportedly has a way to convert a branch to persistent — worth checking
+    there directly, since neither the CLI (not available in the session
+    that set this up) nor the Management API surfaced a way to set that
+    flag on creation.
+- ⬜ **Still needed** — the one part that has to happen in the Vercel
+  dashboard, not here: split **Preview**'s Supabase env vars off from
+  **Production**'s (Project → Settings → Environment Variables, scope each
+  to the right environment):
+  - `NEXT_PUBLIC_SUPABASE_URL` → `https://zisxldwvwwddyuorbhnb.supabase.co`
+    for Preview (Production keeps the existing `gkkwxjxdcifjuwxgdpug` URL)
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → the `staging` branch's anon key
+    (fetched via `mcp__Supabase__get_publishable_keys`, not reproduced here
+    since it's a bearer credential — pull it fresh from the dashboard's
+    Project Settings → API on the `staging` branch, or ask this session)
+  - `SUPABASE_SERVICE_ROLE_KEY` → same branch, **Project Settings → API**
+    on the `staging` branch specifically — this one has no read-only MCP
+    tool exposing it, has to be copied by hand
+  - Redeploy Preview once these are set for them to take effect.
 
 **Ongoing workflow once fully wired up**: write every schema change as a
 real file under `supabase/migrations/` (a genuine one, not a placeholder)
