@@ -31,9 +31,9 @@ enabled = true
 [edge_runtime]
 enabled = true
 
-# Once the persistent "staging" branch exists (created after the GitHub
-# integration is fully wired up — see docs/HANDOFF.md), its project ref goes
-# here so config changes pushed to git also sync to that branch, not just
-# ephemeral PR-preview branches.
-# [remotes.staging]
-# project_id = "<staging-branch-project-ref>"
+# The staging branch — created 2026-08-03, bootstrapped from production's
+# schema at that point. Declaring it here means future config.toml changes
+# (not just migrations) pushed to git sync to it too, the same way they do
+# to production.
+[remotes.staging]
+project_id = "zisxldwvwwddyuorbhnb"
