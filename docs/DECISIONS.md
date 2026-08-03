@@ -1438,3 +1438,52 @@ What's new:
   authenticated session available in this environment) — worth a quick
   real check on the next live-preview pass to confirm the model's answers
   read naturally and the modal looks right end to end.
+
+## Decision 28: Staging Supabase project — switched from a second hand-synced project to Git-connected branching
+
+The staging-DB plan from earlier (a plain second Supabase project, Vercel
+Preview pointed at it, every future migration applied to both by hand) was
+blocked for a while on a Supabase plan upgrade. Once the user actually
+upgraded `DP Daily Ops Org` to Pro, reconsidered before building it: the
+user's real worry wasn't the $10/mo a second project would cost, it was
+"we might end up not syncing the stuff properly" — i.e., forgetting to
+apply a future migration to both places, letting them drift. A manually-
+synced second project doesn't fix that risk at all; it just makes the
+consequence of forgetting less visible until it bites.
+
+Switched to Supabase's native **Git-connected branching** instead — once
+set up, every migration pushed to git deploys itself automatically, so
+there's no "remember to also do it on staging" step to ever forget. Traded
+a small amount of setup complexity now for actually removing the risk,
+rather than just working around its cost.
+
+**What this required, concretely**:
+- One-time GitHub App authorization in the Supabase dashboard (**Project
+  Settings → Integrations → GitHub Integration**) — an OAuth consent only
+  the user could grant, not something doable via API/MCP tools.
+- A `quotation-app/supabase/` directory in the repo (`config.toml` +
+  `migrations/`), which didn't exist before — every migration to date had
+  gone straight against production via `mcp__Supabase__apply_migration`,
+  with no file ever saved to git.
+- For the 24 migrations that predate this — no CLI available in this
+  session to run `supabase db pull` (which normally generates one
+  consolidated baseline file and marks it pre-applied in
+  `supabase_migrations.schema_migrations` automatically). Queried that
+  table directly instead (`select version, name from
+  supabase_migrations.schema_migrations`) and created one placeholder file
+  per already-tracked version/name pair, each explicitly commented as a
+  marker rather than real DDL — matching the version numbers is what
+  actually matters (it tells the integration "already applied, skip"),
+  and fabricating plausible-but-not-guaranteed-accurate historical SQL
+  content would have been actively misleading to a future reader who
+  trusted it. Every migration from this feature onward
+  (`gmail_slack_automation`, the first of this session's actual git-tracked
+  migrations) is real, runnable SQL, not a placeholder.
+- Still needed (dashboard-only, not done by this session): connect the
+  GitHub Integration to this specific repo with **Working directory** set
+  to `quotation-app` (the app lives in a subdirectory, not the repo root),
+  enable **Automatic branching** + **Deploy to production**, then create a
+  **persistent** branch (not an ephemeral per-PR preview branch — those
+  auto-pause/delete, wrong for a long-lived staging environment) and split
+  Vercel's Preview env vars to point at it. Documented as the immediate
+  next step in `docs/HANDOFF.md`.
