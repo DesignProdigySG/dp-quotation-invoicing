@@ -1,0 +1,39 @@
+project_id = "quotation-invoicing-app"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = []
+jwt_expiry = 3600
+enable_signup = false
+
+[storage]
+enabled = true
+
+[edge_runtime]
+enabled = true
+
+# Once the persistent "staging" branch exists (created after the GitHub
+# integration is fully wired up — see docs/HANDOFF.md), its project ref goes
+# here so config changes pushed to git also sync to that branch, not just
+# ephemeral PR-preview branches.
+# [remotes.staging]
+# project_id = "<staging-branch-project-ref>"
