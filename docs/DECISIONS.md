@@ -1438,3 +1438,91 @@ What's new:
   authenticated session available in this environment) — worth a quick
   real check on the next live-preview pass to confirm the model's answers
   read naturally and the modal looks right end to end.
+
+## Decision 29: Forgot password / reset password flow
+
+Shipped `/forgot-password` and `/reset-password` pages using Supabase Auth's
+built-in `resetPasswordForEmail`/`updateUser` APIs (commit `6f40d82`),
+mirroring the existing login page/action pattern. Not previously logged
+here — recorded retroactively.
+
+- **`app/forgot-password/page.tsx` + `actions.ts`**: single email-input
+  form; `requestPasswordReset` calls `resetPasswordForEmail(email, {
+  redirectTo: `${APP_URL}/reset-password` })` and always shows the same
+  message regardless of outcome ("If an account exists for that email, a
+  reset link has been sent.") — deliberate, standard user-enumeration
+  protection, not a bug.
+- **`app/reset-password/page.tsx` + `actions.ts`**: new-password +
+  confirm-password form; `updatePassword` calls
+  `supabase.auth.updateUser({ password })` against the session the recovery
+  link established, then signs out and redirects to `/login`.
+- **`app/auth/confirm/route.ts` extended**: now also handles
+  `type=recovery`, defaulting `next` to `/reset-password` instead of
+  `/board` for that type.
+- **`lib/supabase/middleware.ts`**: `/forgot-password` added to the
+  unauthenticated-route allowlist — the same easy-to-miss gap class
+  Decision 9 already hit once for `/auth/confirm`.
+
+## Decision 30: Supabase "Reset Password" email template corrected to route through `/auth/confirm`
+
+While verifying Decision 29's flow on the deployed site, the actual email
+link Supabase sent didn't match what `/auth/confirm/route.ts` expects —
+Supabase's email templates are dashboard config, not something this repo's
+code controls or can verify on its own.
+
+- **Fix applied**: the "Reset Password" template was rewritten (in the
+  Supabase dashboard, not this repo) to
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`
+  instead of Supabase's default `{{ .ConfirmationURL }}` shape — confirmed
+  working end to end afterward (account created, reset link received,
+  password actually changed).
+- **Still open**: the "Confirm signup" template was checked separately and
+  found still the **unedited default** — it produces a bare
+  `{{ .SiteURL }}/?code=...}` link, which nothing in this app handles
+  (`app/page.tsx` is an unconditional `redirect("/board")` that never reads
+  a `code` param). Needs the same treatment as the recovery template:
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`. Not
+  confirmed fixed as of this writing.
+- **Also found, separately**: Supabase Auth's **Site URL**
+  (Authentication → URL Configuration) was still its out-of-the-box
+  `http://localhost:3000` default rather than the real deployed domain —
+  the fallback destination for any link without an explicit override.
+  Reset-password's explicit `redirectTo` (Decision 29) masked this for that
+  one flow; Confirm-signup has no such override, so it's fully exposed to
+  the wrong Site URL until that setting is corrected too.
+- **Symptom that prompted this investigation**: clicking these links showed
+  `http://localhost:3000/...` in the browser, sometimes
+  `ERR_CONNECTION_REFUSED` and sometimes appearing to "work" — the latter
+  only because a local `npm run dev` instance happened to be running
+  against the same shared database at the time, not because the link was
+  actually correct.
+- **Also hit while re-testing**: Supabase's built-in email sender's rate
+  limit — confirmed via a live Supabase auth log
+  (`error_code: "over_email_send_rate_limit"`, HTTP 429 on `POST
+  /recover`). It's rate-limited for testing only; a real SMTP provider
+  (Authentication → Email → SMTP Settings) is needed before relying on
+  these emails for real usage volume, not just occasional manual tests.
+
+## Decision 31: `zisxldwvwwddyuorbhnb` confirmed as the staging Supabase project
+
+`docs/HANDOFF.md` documented exactly **one** Supabase project
+(`gkkwxjxdcifjuwxgdpug`), staging explicitly not yet built. While
+investigating Decision 30's rate-limit error, a live Supabase auth log
+surfaced a project ref — `zisxldwvwwddyuorbhnb` — not mentioned anywhere in
+this repo's docs, alongside the pre-existing unrelated `Intelligent
+Automation Pipeline` project (`ssbdlttcyogtcowvcbaj`) noted in
+`docs/POOLS_AND_DRAWS_DESIGN.md`. **Confirmed directly: `zisxldwvwwddyuorbhnb`
+is the staging Supabase project**, used to test features before they're
+merged/pushed to production.
+
+- The log that surfaced this ref had a `referer` of the real production
+  domain (`dp-quotation-invoicing.vercel.app`), which read as confusing at
+  first glance — flagged rather than silently resolved, since the
+  discrepancy itself wasn't independently re-explained this session.
+- **Practical implication**: `docs/HANDOFF.md`'s "Staging environment &
+  migration workflow" section, written when staging was still just a plan
+  blocked on a billing upgrade, is now stale — a staging project exists.
+  Per direct instruction, `docs/HANDOFF.md` is not edited by this assistant
+  going forward — see `docs/cherylhandoff.md` for the follow-up items this
+  implies, including confirming which project id Vercel's Preview
+  environment actually points at.
