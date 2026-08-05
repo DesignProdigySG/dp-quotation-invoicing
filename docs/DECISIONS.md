@@ -1501,3 +1501,146 @@ auto-*deleted*; auto-*pausing* after inactivity is possible but just adds
 latency on the next request, not data loss). Only remaining step is
 Vercel-side and has to be done by the user directly: splitting Preview's
 Supabase env vars from Production's.
+
+## Decision 29: Forgot password / reset password flow
+
+Shipped `/forgot-password` and `/reset-password` pages using Supabase Auth's
+built-in `resetPasswordForEmail`/`updateUser` APIs (commit `6f40d82`),
+mirroring the existing login page/action pattern. Not previously logged
+here — recorded retroactively.
+
+- **`app/forgot-password/page.tsx` + `actions.ts`**: single email-input
+  form; `requestPasswordReset` calls `resetPasswordForEmail(email, {
+  redirectTo: `${APP_URL}/reset-password` })` and always shows the same
+  message regardless of outcome ("If an account exists for that email, a
+  reset link has been sent.") — deliberate, standard user-enumeration
+  protection, not a bug.
+- **`app/reset-password/page.tsx` + `actions.ts`**: new-password +
+  confirm-password form; `updatePassword` calls
+  `supabase.auth.updateUser({ password })` against the session the recovery
+  link established, then signs out and redirects to `/login`.
+- **`app/auth/confirm/route.ts` extended**: now also handles
+  `type=recovery`, defaulting `next` to `/reset-password` instead of
+  `/board` for that type.
+- **`lib/supabase/middleware.ts`**: `/forgot-password` added to the
+  unauthenticated-route allowlist — the same easy-to-miss gap class
+  Decision 9 already hit once for `/auth/confirm`.
+
+## Decision 30: Supabase "Reset Password" email template corrected to route through `/auth/confirm`
+
+While verifying Decision 29's flow on the deployed site, the actual email
+link Supabase sent didn't match what `/auth/confirm/route.ts` expects —
+Supabase's email templates are dashboard config, not something this repo's
+code controls or can verify on its own.
+
+- **Fix applied**: the "Reset Password" template was rewritten (in the
+  Supabase dashboard, not this repo) to
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`
+  instead of Supabase's default `{{ .ConfirmationURL }}` shape — confirmed
+  working end to end afterward (account created, reset link received,
+  password actually changed).
+- **Still open**: the "Confirm signup" template was checked separately and
+  found still the **unedited default** — it produces a bare
+  `{{ .SiteURL }}/?code=...}` link, which nothing in this app handles
+  (`app/page.tsx` is an unconditional `redirect("/board")` that never reads
+  a `code` param). Needs the same treatment as the recovery template:
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`. Not
+  confirmed fixed as of this writing.
+- **Also found, separately**: Supabase Auth's **Site URL**
+  (Authentication → URL Configuration) was still its out-of-the-box
+  `http://localhost:3000` default rather than the real deployed domain —
+  the fallback destination for any link without an explicit override.
+  Reset-password's explicit `redirectTo` (Decision 29) masked this for that
+  one flow; Confirm-signup has no such override, so it's fully exposed to
+  the wrong Site URL until that setting is corrected too.
+- **Symptom that prompted this investigation**: clicking these links showed
+  `http://localhost:3000/...` in the browser, sometimes
+  `ERR_CONNECTION_REFUSED` and sometimes appearing to "work" — the latter
+  only because a local `npm run dev` instance happened to be running
+  against the same shared database at the time, not because the link was
+  actually correct.
+- **Also hit while re-testing**: Supabase's built-in email sender's rate
+  limit — confirmed via a live Supabase auth log
+  (`error_code: "over_email_send_rate_limit"`, HTTP 429 on `POST
+  /recover`). It's rate-limited for testing only; a real SMTP provider
+  (Authentication → Email → SMTP Settings) is needed before relying on
+  these emails for real usage volume, not just occasional manual tests.
+
+## Decision 31: `zisxldwvwwddyuorbhnb` confirmed as the staging Supabase project
+
+`docs/HANDOFF.md` documented exactly **one** Supabase project
+(`gkkwxjxdcifjuwxgdpug`), staging explicitly not yet built. While
+investigating Decision 30's rate-limit error, a live Supabase auth log
+surfaced a project ref — `zisxldwvwwddyuorbhnb` — not mentioned anywhere in
+this repo's docs, alongside the pre-existing unrelated `Intelligent
+Automation Pipeline` project (`ssbdlttcyogtcowvcbaj`) noted in
+`docs/POOLS_AND_DRAWS_DESIGN.md`. **Confirmed directly: `zisxldwvwwddyuorbhnb`
+is the staging Supabase project**, used to test features before they're
+merged/pushed to production.
+
+- The log that surfaced this ref had a `referer` of the real production
+  domain (`dp-quotation-invoicing.vercel.app`), which read as confusing at
+  first glance — flagged rather than silently resolved, since the
+  discrepancy itself wasn't independently re-explained this session.
+- **Practical implication**: `docs/HANDOFF.md`'s "Staging environment &
+  migration workflow" section, written when staging was still just a plan
+  blocked on a billing upgrade, is now stale — a staging project exists.
+  Per direct instruction, `docs/HANDOFF.md` is not edited by this assistant
+  going forward — see `docs/cherylhandoff.md` for the follow-up items this
+  implies, including confirming which project id Vercel's Preview
+  environment actually points at.
+- **Independently re-verified 2026-08-05** once a Supabase MCP connection
+  became available: `list_tables` against `gkkwxjxdcifjuwxgdpug` shows real
+  data across all 14 tables (3 clients, 7 quotations, 57 unmatched email
+  quotes, live Gmail/Xero/Salesforce connections); the same call against
+  `zisxldwvwwddyuorbhnb` shows the identical schema with **0 rows in every
+  table**. This confirms the mapping from data, not just the earlier log's
+  `referer` field — `gkkwxjxdcifjuwxgdpug` is production,
+  `zisxldwvwwddyuorbhnb` is staging. Still not confirmed: whether Vercel's
+  `NEXT_PUBLIC_SUPABASE_URL` env var actually matches this for both
+  Production and Preview.
+
+## Decision 32: `/auth/confirm` no longer verifies on GET — requires a real click first
+
+Re-testing Decision 30's reset-password fix on the deployed site produced a
+new failure: the link now correctly reached the real domain, but landed on
+`/login?error=That confirmation link is invalid or has expired.` instead of
+`/reset-password`.
+
+- **Root cause, researched rather than guessed**: `app/auth/confirm/route.ts`
+  was a GET route handler that called `supabase.auth.verifyOtp({ type,
+  token_hash })` — a one-time-use, token-consuming call — immediately on
+  every GET request. Per Supabase's own community guidance (`github.com/orgs/
+  supabase/discussions/28655` and related threads, checked directly via
+  WebSearch/WebFetch this session), this is a known failure mode: email
+  security scanners (Microsoft Defender Safe Links and equivalent features on
+  other providers/Workspace domains) issue their own GET to scan a link
+  *before* the real user clicks it, silently burning the token. The real
+  click then correctly gets rejected as already-used/expired by Supabase —
+  nothing wrong with the token generation or the template, just with
+  consuming it eagerly on an unauthenticated GET.
+- **Confirmed this app's overall approach was already the *correct* one** —
+  `token_hash` + `verifyOtp`, not `code=` + `exchangeCodeForSession` (the
+  latter is the version of this bug class that's cross-browser/cross-device
+  broken by design under PKCE, per the same research). The fix here is
+  narrower: stop calling the token-consuming step automatically.
+- **Fix**: replaced the GET route handler with a page + server action,
+  mirroring the existing `login/`, `forgot-password/`, `reset-password/`
+  pattern exactly:
+  - `app/auth/confirm/page.tsx` (new) — reads `token_hash`/`type`/`next`
+    from `searchParams`, renders a type-aware confirmation card ("Reset
+    your password" / "Confirm your account") with a single button in a
+    `<form>`. No verification happens on load.
+  - `app/auth/confirm/actions.ts` (new) — `confirmAuthLink(formData)` holds
+    the exact same `verifyOtp`/redirect logic the old route handler had,
+    now only reachable via a real form submit (a genuine click), which
+    GET-only link scanners don't trigger.
+  - `app/auth/confirm/route.ts` deleted.
+- **No changes needed** to `lib/supabase/middleware.ts` (already allowlists
+  `/auth/confirm` by path prefix) or to the Supabase email templates (same
+  `token_hash`/`type` query shape, same path).
+- **Verification**: `npx tsc --noEmit` and `npm run build` both clean (29
+  routes, `/auth/confirm` compiles as a dynamic route). **Not yet verified
+  live** — the link in the screenshot that surfaced this bug is already
+  burned either way, so testing needs a freshly-requested reset email; see
+  `docs/cherylhandoff.md`.

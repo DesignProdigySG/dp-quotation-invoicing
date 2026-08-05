@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { signIn, signUp } from "./actions";
+import { requestPasswordReset } from "./actions";
 
-export default async function LoginPage({
+export default async function ForgotPasswordPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string; message?: string }>;
@@ -11,8 +11,10 @@ export default async function LoginPage({
   return (
     <div className="login-wrap">
       <div className="card login-card">
-        <h1>Quotations &amp; Invoices</h1>
-        <p className="subtitle">Sign up for an account with your DP email address.</p>
+        <h1>Reset your password</h1>
+        <p className="subtitle">
+          Enter your email address and we&apos;ll send you a link to reset your password.
+        </p>
 
         {params.error && <div className="error">{params.error}</div>}
         {params.message && (
@@ -21,26 +23,20 @@ export default async function LoginPage({
           </div>
         )}
 
-        <form action={signIn}>
+        <form action={requestPasswordReset}>
           <label htmlFor="email">Email</label>
           <input id="email" name="email" type="email" required />
 
-          <label htmlFor="password">Password</label>
-          <input id="password" name="password" type="password" required />
-
-          <p className="subtitle" style={{ marginTop: 8, marginBottom: 0 }}>
-            <Link href="/forgot-password">Forgot password?</Link>
-          </p>
-
           <div className="actions" style={{ marginTop: 18 }}>
             <button className="btn btn-primary" type="submit">
-              Sign in
-            </button>
-            <button className="btn" type="submit" formAction={signUp}>
-              Create account
+              Send reset link
             </button>
           </div>
         </form>
+
+        <p className="subtitle" style={{ marginTop: 18 }}>
+          <Link href="/login">Back to sign in</Link>
+        </p>
       </div>
     </div>
   );
