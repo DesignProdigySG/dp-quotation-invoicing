@@ -1,0 +1,39 @@
+project_id = "quotation-invoicing-app"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = []
+jwt_expiry = 3600
+enable_signup = false
+
+[storage]
+enabled = true
+
+[edge_runtime]
+enabled = true
+
+# The staging branch — created 2026-08-03, bootstrapped from production's
+# schema at that point. Declaring it here means future config.toml changes
+# (not just migrations) pushed to git sync to it too, the same way they do
+# to production.
+[remotes.staging]
+project_id = "zisxldwvwwddyuorbhnb"

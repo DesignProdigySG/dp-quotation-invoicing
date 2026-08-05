@@ -176,53 +176,87 @@ other session or agent.
   used to build the "Open in app" link in Slack messages. Server-only, no
   `NEXT_PUBLIC_` prefix needed.
 
-## Staging environment & migration workflow (planned, blocked on a Supabase plan upgrade)
+## Staging environment & migration workflow
 
 Today there is **one** Supabase project (`gkkwxjxdcifjuwxgdpug`), used by both
 Vercel Production and Preview deployments — every migration and every Preview
-deployment hits the same live data. A separate staging project is planned so
-Preview can be tested against without touching production. **Not yet done** —
-the account behind this project's Supabase org has already used both of its
-free-project slots (this project, plus a separate `Intelligence Automation
-Pipeline` project under a different org, same account), so creating a
-staging project requires upgrading `DP Daily Ops Org` (or another org) to
-the Supabase Pro plan first — a billing action, not something any tool/agent
-can do. Once that happens:
+deployment hits the same live data. Fixing this was blocked for a while on a
+Supabase plan upgrade; that's now done (`DP Daily Ops Org` is on Pro), and the
+approach taken is **Supabase's native Git-connected branching**, not a second
+hand-synced project (an earlier plan, superseded — see `docs/DECISIONS.md`
+for why: doubling every future migration by hand forever was the real cost,
+not the $10/mo a second project would have added).
 
-- **Setup**: create a second free-standing project in the same org (not
-  Supabase's native Git-branching feature — that also needs Pro plus
-  per-branch compute cost and a CLI migrations workflow this repo doesn't
-  have yet; a plain second project synced by hand is simpler and cheaper for
-  where this project is today). Reconstruct its schema to exactly match
-  production — 13 tables (all RLS-enabled), 3 storage buckets
-  (`external-quotes`, `feedback-images`, `signatures`, all private), 3
-  trigger functions (`set_invoice_number`, `set_quote_number`,
-  `set_updated_at`), 5 triggers, ~30 RLS policies — generated from
-  production's own `pg_catalog` (`pg_get_constraintdef`/`pg_get_functiondef`/
-  `pg_policies.qual`) rather than hand-retyped, so it's exact. Then start a
-  `supabase/migrations/` directory (this repo has never had one — every
-  migration to date went straight against production via
-  `mcp__Supabase__apply_migration`, no git-tracked file) and split Vercel's
-  `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`/
-  `SUPABASE_SERVICE_ROLE_KEY` so **Preview** points at staging and
-  **Production** keeps pointing at the current project.
+**How it works**: connect this Supabase project to this GitHub repo once;
+from then on, every migration pushed to git deploys itself automatically —
+no manual "also apply this to staging" step, ever. This directly fixes the
+actual risk (forgetting to keep two databases in sync), not just the
+"they're on different plans" surface problem.
 
-- **Ongoing workflow once it exists** — the discipline this whole approach
-  depends on, since nothing enforces it automatically the way paid branching
-  would:
-  1. Write every schema change as a file under `supabase/migrations/`.
-  2. Apply + test it on **staging** first (via `apply_migration` against
-     the staging project, then exercise it through a Preview deployment).
-  3. Once confirmed good, apply the **identical SQL** to **production**.
-  4. To check how far behind prod is at any point, diff
-     `mcp__Supabase__list_migrations` between the two project ids — that's
-     the actual tracked history, not something to keep in memory.
-  5. **Call out destructive migrations explicitly** before applying them to
-     prod (`DROP COLUMN`/`DROP TABLE`, lossy type changes, anything that
-     deletes data) — cheap preventive habit, distinct from and in addition
-     to the rollback options below, not a substitute for them.
+**Setup status**:
+- ✅ `DP Daily Ops Org` upgraded to Pro.
+- ✅ GitHub integration authorized (**Project Settings → Integrations →
+  GitHub Integration → Authorize GitHub**) — a one-time OAuth consent, done
+  from the Supabase dashboard, not something any tool/agent can do on a
+  user's behalf.
+- ✅ `quotation-app/supabase/` created and committed: `config.toml`, plus a
+  `migrations/` directory with one file per entry already in production's
+  own `supabase_migrations.schema_migrations` table (24 files, versions
+  `20260720040549` through `20260802125312`). These are **placeholder
+  markers, not the original DDL** — every migration before this repo
+  tracked them in git was applied straight against production via
+  `mcp__Supabase__apply_migration`, with no file ever saved. Matching their
+  version numbers exactly tells Supabase's tooling "already applied, don't
+  re-run" for all of them, which is what actually matters (re-running real
+  `CREATE TABLE` statements against a database that already has those
+  tables would just fail). The real schema is always directly inspectable
+  against the production project id — never trust these placeholder files'
+  content for that. **Every migration from `20260802125312`
+  (`gmail_slack_automation`) onward is real, runnable SQL**, and everything
+  from here forward will be too.
+- ✅ Repo connected (**Integrations** page): `DesignProdigySG/dp-quotation-invoicing`,
+  **Working directory** `quotation-app`, **Automatic branching** and
+  **Deploy to production** both on.
+- ✅ Branch `staging` created (project ref `zisxldwvwwddyuorbhnb`,
+  `https://zisxldwvwwddyuorbhnb.supabase.co`), bootstrapped automatically
+  from production's schema at creation time — confirmed via `list_tables`:
+  all 14 tables present (13 original + `email_client_corrections` from this
+  session), RLS enabled on all of them, 0 rows. `[remotes.staging]` in
+  `config.toml` points at it, so future `config.toml` changes (not just
+  migrations) sync there too, the same as production.
+  - **Known gap**: it came back from the Management API as
+    `persistent: false`. Since nothing created it via a PR, it shouldn't be
+    auto-*deleted* the way a merged/closed PR's preview branch would be —
+    but it may still auto-*pause* after a stretch of inactivity (harmless;
+    it just wakes up on the next request, maybe with a moment's delay).
+    If that's ever actually annoying, the Branches page in the dashboard
+    reportedly has a way to convert a branch to persistent — worth checking
+    there directly, since neither the CLI (not available in the session
+    that set this up) nor the Management API surfaced a way to set that
+    flag on creation.
+- ⬜ **Still needed** — the one part that has to happen in the Vercel
+  dashboard, not here: split **Preview**'s Supabase env vars off from
+  **Production**'s (Project → Settings → Environment Variables, scope each
+  to the right environment):
+  - `NEXT_PUBLIC_SUPABASE_URL` → `https://zisxldwvwwddyuorbhnb.supabase.co`
+    for Preview (Production keeps the existing `gkkwxjxdcifjuwxgdpug` URL)
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` → the `staging` branch's anon key
+    (fetched via `mcp__Supabase__get_publishable_keys`, not reproduced here
+    since it's a bearer credential — pull it fresh from the dashboard's
+    Project Settings → API on the `staging` branch, or ask this session)
+  - `SUPABASE_SERVICE_ROLE_KEY` → same branch, **Project Settings → API**
+    on the `staging` branch specifically — this one has no read-only MCP
+    tool exposing it, has to be copied by hand
+  - Redeploy Preview once these are set for them to take effect.
 
-- **Rollback, if a migration breaks prod anyway**:
+**Ongoing workflow once fully wired up**: write every schema change as a
+real file under `supabase/migrations/` (a genuine one, not a placeholder)
+and push it — it deploys itself to the staging branch automatically. Once
+confirmed good there, merging to `main` deploys it to production the same
+way (via "Deploy to production"). No manual double-apply step, which is the
+entire point.
+
+**Rollback, if a migration breaks prod anyway**:
   - Additive changes (this project's history so far — adding nullable
     columns) roll back cheaply: just apply the reverse SQL
     (`DROP COLUMN`, etc.).
@@ -257,9 +291,11 @@ can do. Once that happens:
 
 ## What's next (confirmed priorities, in order)
 
-**0. Staging Supabase project.** Blocked on the user upgrading a Supabase
-org to Pro (see "Staging environment & migration workflow" above for the
-full plan) — pick this up first once that's done.
+**0. Staging Supabase project (Git-connected branching).** Pro upgrade done,
+GitHub integration authorized, repo-side `supabase/` directory in place —
+see "Staging environment & migration workflow" above for exactly what's
+left (two dashboard fields, then creating the persistent branch and
+splitting Vercel's env vars). Pick this up first.
 
 **New direction, exploratory only — read before building anything here:**
 `docs/POOLS_AND_DRAWS_DESIGN.md` — a design discussion (not a spec, not built) for

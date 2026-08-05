@@ -1,0 +1,19 @@
+-- Placeholder marker, not the original DDL.
+--
+-- This migration was applied directly against the live production project
+-- (ref gkkwxjxdcifjuwxgdpug) via the Supabase MCP server across many past
+-- sessions, before this repo tracked migrations in git at all. Its real
+-- effect already exists live in production; this file exists only so its
+-- version number matches supabase_migrations.schema_migrations exactly,
+-- which tells the GitHub integration "already applied, don't re-run" for
+-- every migration up through this one. Do not run this file directly
+-- against a fresh/empty database -- it will not reproduce the real schema.
+--
+-- The real, current schema is always inspectable directly against the
+-- production project (list_tables / execute_sql via the Supabase MCP
+-- server), and gets cloned automatically whenever a new branch is created
+-- from this project going forward.
+--
+-- Every migration from 2026-08-02 (gmail_slack_automation) onward is real,
+-- runnable SQL -- this placeholder treatment only applies to migrations
+-- that predate git-tracked migrations.
