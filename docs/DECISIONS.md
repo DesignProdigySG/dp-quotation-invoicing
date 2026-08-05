@@ -1526,6 +1526,16 @@ merged/pushed to production.
   going forward — see `docs/cherylhandoff.md` for the follow-up items this
   implies, including confirming which project id Vercel's Preview
   environment actually points at.
+- **Independently re-verified 2026-08-05** once a Supabase MCP connection
+  became available: `list_tables` against `gkkwxjxdcifjuwxgdpug` shows real
+  data across all 14 tables (3 clients, 7 quotations, 57 unmatched email
+  quotes, live Gmail/Xero/Salesforce connections); the same call against
+  `zisxldwvwwddyuorbhnb` shows the identical schema with **0 rows in every
+  table**. This confirms the mapping from data, not just the earlier log's
+  `referer` field — `gkkwxjxdcifjuwxgdpug` is production,
+  `zisxldwvwwddyuorbhnb` is staging. Still not confirmed: whether Vercel's
+  `NEXT_PUBLIC_SUPABASE_URL` env var actually matches this for both
+  Production and Preview.
 
 ## Decision 32: `/auth/confirm` no longer verifies on GET — requires a real click first
 

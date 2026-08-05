@@ -16,11 +16,16 @@ pick up directly instead of re-deriving context.
 
 ## Open items as of 2026-08-04
 
-- Confirm in Vercel env vars (`NEXT_PUBLIC_SUPABASE_URL`, Production vs.
-  Preview) that `gkkwxjxdcifjuwxgdpug` is really production and
-  `zisxldwvwwddyuorbhnb` is really staging (Decision 31) — mapping
-  confirmed by Cheryl, but the Vercel env-var wiring itself hasn't been
-  independently re-verified.
+- **Project-ref mapping now independently confirmed** (2026-08-05, via
+  direct Supabase MCP access, not just the earlier log-referer inference):
+  `gkkwxjxdcifjuwxgdpug` has real data across all 14 tables (3 clients, 7
+  quotations, 57 unmatched email quotes, live Gmail/Xero/Salesforce
+  connections) — production. `zisxldwvwwddyuorbhnb` has the identical
+  schema with **0 rows in every table** — staging. What's still
+  unconfirmed: whether Vercel's env vars (`NEXT_PUBLIC_SUPABASE_URL` for
+  Production vs. Preview) actually point at the matching project each —
+  the data itself confirms which project *is* which, not how Vercel is
+  wired to them.
 - Fix the "Confirm signup" Supabase email template — still the unedited
   default as of Decision 30, produces a broken `/?code=...` link.
 - Fix Supabase Auth's Site URL (Authentication → URL Configuration) — still
