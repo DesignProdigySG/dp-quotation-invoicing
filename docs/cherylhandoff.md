@@ -31,6 +31,9 @@ pick up directly instead of re-deriving context.
   (branch: `claude/dp-quotation-invoicing-overview-l5rpsp`) — confirm it
   still works after the Confirm-signup template / Site URL fixes above are
   applied, not just in isolation like the last test.
+- **Retest reset-password again with a fresh link** after Decision 32's fix
+  (`/auth/confirm` now needs a real click, no longer auto-verifies on GET) —
+  the link from the last test is already burned and can't be reused.
 - `docs/HANDOFF.md`'s "Staging environment & migration workflow" section is
   now stale (still describes staging as "planned, blocked on a billing
   upgrade") — needs updating by Cheryl or a future session, not this one.

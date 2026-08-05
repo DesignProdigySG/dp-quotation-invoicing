@@ -1526,3 +1526,48 @@ merged/pushed to production.
   going forward — see `docs/cherylhandoff.md` for the follow-up items this
   implies, including confirming which project id Vercel's Preview
   environment actually points at.
+
+## Decision 32: `/auth/confirm` no longer verifies on GET — requires a real click first
+
+Re-testing Decision 30's reset-password fix on the deployed site produced a
+new failure: the link now correctly reached the real domain, but landed on
+`/login?error=That confirmation link is invalid or has expired.` instead of
+`/reset-password`.
+
+- **Root cause, researched rather than guessed**: `app/auth/confirm/route.ts`
+  was a GET route handler that called `supabase.auth.verifyOtp({ type,
+  token_hash })` — a one-time-use, token-consuming call — immediately on
+  every GET request. Per Supabase's own community guidance (`github.com/orgs/
+  supabase/discussions/28655` and related threads, checked directly via
+  WebSearch/WebFetch this session), this is a known failure mode: email
+  security scanners (Microsoft Defender Safe Links and equivalent features on
+  other providers/Workspace domains) issue their own GET to scan a link
+  *before* the real user clicks it, silently burning the token. The real
+  click then correctly gets rejected as already-used/expired by Supabase —
+  nothing wrong with the token generation or the template, just with
+  consuming it eagerly on an unauthenticated GET.
+- **Confirmed this app's overall approach was already the *correct* one** —
+  `token_hash` + `verifyOtp`, not `code=` + `exchangeCodeForSession` (the
+  latter is the version of this bug class that's cross-browser/cross-device
+  broken by design under PKCE, per the same research). The fix here is
+  narrower: stop calling the token-consuming step automatically.
+- **Fix**: replaced the GET route handler with a page + server action,
+  mirroring the existing `login/`, `forgot-password/`, `reset-password/`
+  pattern exactly:
+  - `app/auth/confirm/page.tsx` (new) — reads `token_hash`/`type`/`next`
+    from `searchParams`, renders a type-aware confirmation card ("Reset
+    your password" / "Confirm your account") with a single button in a
+    `<form>`. No verification happens on load.
+  - `app/auth/confirm/actions.ts` (new) — `confirmAuthLink(formData)` holds
+    the exact same `verifyOtp`/redirect logic the old route handler had,
+    now only reachable via a real form submit (a genuine click), which
+    GET-only link scanners don't trigger.
+  - `app/auth/confirm/route.ts` deleted.
+- **No changes needed** to `lib/supabase/middleware.ts` (already allowlists
+  `/auth/confirm` by path prefix) or to the Supabase email templates (same
+  `token_hash`/`type` query shape, same path).
+- **Verification**: `npx tsc --noEmit` and `npm run build` both clean (29
+  routes, `/auth/confirm` compiles as a dynamic route). **Not yet verified
+  live** — the link in the screenshot that surfaced this bug is already
+  burned either way, so testing needs a freshly-requested reset email; see
+  `docs/cherylhandoff.md`.

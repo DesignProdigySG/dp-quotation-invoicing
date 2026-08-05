@@ -17,6 +17,10 @@ else, doesn't need to stay in sync with anything.
 - **Identified `zisxldwvwwddyuorbhnb` as the staging Supabase project** —
   resolved the project-ref confusion found in a live Supabase log. Full
   detail: `docs/DECISIONS.md` Decision 31.
+- **Fixed `/auth/confirm` silently burning reset-password tokens** — email
+  link scanners were consuming the one-time token before the real click;
+  now requires a real button click before verifying. Full detail:
+  `docs/DECISIONS.md` Decision 32.
 
 ---
 
