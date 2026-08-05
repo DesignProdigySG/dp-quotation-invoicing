@@ -1565,6 +1565,12 @@ code controls or can verify on its own.
   /recover`). It's rate-limited for testing only; a real SMTP provider
   (Authentication → Email → SMTP Settings) is needed before relying on
   these emails for real usage volume, not just occasional manual tests.
+- **Resolved 2026-08-05**: the "Confirm signup" template and Site URL fixes
+  above were applied by Cheryl directly — fixed on staging first, verified
+  working there, then the identical fix ported to production. Confirmed
+  working end to end on production afterward (no more `localhost:3000`
+  redirects, confirm/reset links land correctly). Both open items from this
+  decision are closed.
 
 ## Decision 31: `zisxldwvwwddyuorbhnb` confirmed as the staging Supabase project
 

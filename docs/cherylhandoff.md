@@ -26,19 +26,21 @@ pick up directly instead of re-deriving context.
   Production vs. Preview) actually point at the matching project each —
   the data itself confirms which project *is* which, not how Vercel is
   wired to them.
-- Fix the "Confirm signup" Supabase email template — still the unedited
-  default as of Decision 30, produces a broken `/?code=...` link.
-- Fix Supabase Auth's Site URL (Authentication → URL Configuration) — still
-  `http://localhost:3000` as of Decision 30.
+- ~~Fix the "Confirm signup" Supabase email template~~ — **done 2026-08-05**,
+  fixed on staging first, then production. Confirmed working end to end.
+- ~~Fix Supabase Auth's Site URL~~ — **done 2026-08-05**, same as above.
+- ~~Retest reset-password with a fresh link after Decision 32's fix~~ —
+  **done 2026-08-05**, confirmed working on production post-merge.
 - Consider a real SMTP provider for Supabase Auth emails — the built-in
-  sender's rate limit was hit during ordinary testing (Decision 30).
-- Test the password reset flow one more time end-to-end before merging
-  (branch: `claude/dp-quotation-invoicing-overview-l5rpsp`) — confirm it
-  still works after the Confirm-signup template / Site URL fixes above are
-  applied, not just in isolation like the last test.
-- **Retest reset-password again with a fresh link** after Decision 32's fix
-  (`/auth/confirm` now needs a real click, no longer auto-verifies on GET) —
-  the link from the last test is already burned and can't be reused.
+  sender's rate limit was hit during ordinary testing (Decision 30). Still
+  open.
 - `docs/HANDOFF.md`'s "Staging environment & migration workflow" section is
-  now stale (still describes staging as "planned, blocked on a billing
-  upgrade") — needs updating by Cheryl or a future session, not this one.
+  now doubly stale — it still describes staging as "planned, blocked on a
+  billing upgrade," but staging is not only built, it's since moved to
+  Supabase's native Git-connected branching (Decision 28, found on `main`
+  when merging PR #37) rather than the manually-synced second project this
+  session initially identified (Decision 31). Needs updating by Cheryl or a
+  future session, not this one.
+- PR #37 merged to `main` 2026-08-05 (commit `f7f6d628`) — password reset
+  flow, the auth-confirm click-required fix, and Decisions 29-32 are now
+  all live on production.
