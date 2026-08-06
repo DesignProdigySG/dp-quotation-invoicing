@@ -30,6 +30,7 @@ export default function ClientForm({
     default_currency: string;
     default_gst_rate: number;
     default_payment_terms_days: number | null;
+    default_management_fee_rate: number | null;
     display_currency_preference: "original" | "sgd";
     salesforce_account_id: string | null;
   };
@@ -43,6 +44,7 @@ export default function ClientForm({
     default_currency: initial?.default_currency || "SGD",
     default_gst_rate: initial?.default_gst_rate ?? 9,
     default_payment_terms_days: initial?.default_payment_terms_days ?? null,
+    default_management_fee_rate: initial?.default_management_fee_rate ?? null,
     display_currency_preference:
       (initial?.display_currency_preference as "original" | "sgd") || "original",
     salesforce_account_id: initial?.salesforce_account_id ?? null,
@@ -154,6 +156,24 @@ export default function ClientForm({
               setForm({
                 ...form,
                 default_payment_terms_days:
+                  e.target.value === "" ? null : Number(e.target.value),
+              })
+            }
+          />
+        </div>
+        <div>
+          <label htmlFor="default_management_fee_rate">
+            Management fee % (client-funds ledger, leave blank if unused)
+          </label>
+          <input
+            id="default_management_fee_rate"
+            type="number"
+            step="0.01"
+            value={form.default_management_fee_rate ?? ""}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                default_management_fee_rate:
                   e.target.value === "" ? null : Number(e.target.value),
               })
             }
