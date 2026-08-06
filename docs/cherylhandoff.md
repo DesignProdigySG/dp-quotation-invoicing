@@ -16,16 +16,17 @@ pick up directly instead of re-deriving context.
 
 ## Open items as of 2026-08-04
 
-- **Project-ref mapping now independently confirmed** (2026-08-05, via
-  direct Supabase MCP access, not just the earlier log-referer inference):
-  `gkkwxjxdcifjuwxgdpug` has real data across all 14 tables (3 clients, 7
-  quotations, 57 unmatched email quotes, live Gmail/Xero/Salesforce
-  connections) — production. `zisxldwvwwddyuorbhnb` has the identical
-  schema with **0 rows in every table** — staging. What's still
-  unconfirmed: whether Vercel's env vars (`NEXT_PUBLIC_SUPABASE_URL` for
-  Production vs. Preview) actually point at the matching project each —
-  the data itself confirms which project *is* which, not how Vercel is
-  wired to them.
+- ~~Project-ref mapping / Vercel env var wiring~~ — **fully confirmed
+  2026-08-06**. `gkkwxjxdcifjuwxgdpug` has real data across all 14 tables
+  (3 clients, 7 quotations, 57 unmatched email quotes, live Gmail/Xero/
+  Salesforce connections) — production. `zisxldwvwwddyuorbhnb` has the
+  identical schema with 0 rows — staging. Vercel's env vars are correctly
+  split: `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`/
+  `SUPABASE_SERVICE_ROLE_KEY` all point Production → `gkkwxjxdcifjuwxgdpug`
+  and Preview → `zisxldwvwwddyuorbhnb` (verified via Vercel dashboard
+  screenshots). This was already done before it was even flagged as
+  outstanding — `docs/HANDOFF.md`'s "⬜ Still needed" line for this is
+  stale, worth fixing whenever that doc gets its next pass.
 - ~~Fix the "Confirm signup" Supabase email template~~ — **done 2026-08-05**,
   fixed on staging first, then production. Confirmed working end to end.
 - ~~Fix Supabase Auth's Site URL~~ — **done 2026-08-05**, same as above.

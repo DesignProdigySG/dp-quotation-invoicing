@@ -1502,6 +1502,17 @@ latency on the next request, not data loss). Only remaining step is
 Vercel-side and has to be done by the user directly: splitting Preview's
 Supabase env vars from Production's.
 
+**Confirmed done, 2026-08-06**: verified directly via Vercel's Environment
+Variables page (Cheryl provided screenshots) rather than assumed —
+`NEXT_PUBLIC_SUPABASE_URL` is `gkkwxjxdcifjuwxgdpug` for **Production** and
+`zisxldwvwwddyuorbhnb` for **Preview**, with `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+and `SUPABASE_SERVICE_ROLE_KEY` both separately scoped to Preview too (all
+three added 3 days prior to this check, i.e. already done before this was
+even flagged as outstanding here). The `staging` Supabase branch is
+confirmed still linked in Vercel's branch switcher. `docs/HANDOFF.md`'s
+"⬜ Still needed" line for this is stale — the whole staging setup is
+actually fully wired up, not just partially.
+
 ## Decision 29: Forgot password / reset password flow
 
 Shipped `/forgot-password` and `/reset-password` pages using Supabase Auth's
