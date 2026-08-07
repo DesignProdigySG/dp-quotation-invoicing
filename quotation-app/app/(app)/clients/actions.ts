@@ -15,6 +15,7 @@ export type ClientInput = {
   default_currency: string;
   default_gst_rate: number;
   default_payment_terms_days?: number | null;
+  default_management_fee_rate?: number | null;
   display_currency_preference: "original" | "sgd";
   salesforce_account_id?: string | null;
 };

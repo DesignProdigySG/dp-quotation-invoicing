@@ -62,6 +62,7 @@ export type Database = {
           created_at: string
           default_currency: string
           default_gst_rate: number
+          default_management_fee_rate: number | null
           default_payment_terms_days: number | null
           display_currency_preference: string
           id: string
@@ -80,6 +81,7 @@ export type Database = {
           created_at?: string
           default_currency?: string
           default_gst_rate?: number
+          default_management_fee_rate?: number | null
           default_payment_terms_days?: number | null
           display_currency_preference?: string
           id?: string
@@ -98,6 +100,7 @@ export type Database = {
           created_at?: string
           default_currency?: string
           default_gst_rate?: number
+          default_management_fee_rate?: number | null
           default_payment_terms_days?: number | null
           display_currency_preference?: string
           id?: string
