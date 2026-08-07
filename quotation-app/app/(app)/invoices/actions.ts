@@ -39,6 +39,8 @@ export type CreateInvoiceInput = {
   internal_notes?: string | null;
   external_quote_status: "has_external_quote" | "no_quote";
   external_quote_number?: string | null;
+  management_fee_rate?: number | null;
+  management_fee_applied?: boolean;
   line_items: LineItemInput[];
 };
 
@@ -71,6 +73,8 @@ export async function createInvoice(input: CreateInvoiceInput) {
       internal_notes: input.internal_notes || null,
       external_quote_status: input.external_quote_status,
       external_quote_number: input.external_quote_number || null,
+      management_fee_rate: input.management_fee_rate ?? null,
+      management_fee_applied: input.management_fee_applied ?? false,
     })
     .select()
     .single();
@@ -84,6 +88,7 @@ export async function createInvoice(input: CreateInvoiceInput) {
         description: li.description,
         quantity: li.quantity,
         unit_price: li.unit_price,
+        is_management_fee: li.is_management_fee ?? false,
         sort_order: idx,
       }))
     );
@@ -176,6 +181,7 @@ export async function updateInvoice(id: string, input: InvoiceInput) {
         description: li.description,
         quantity: li.quantity,
         unit_price: li.unit_price,
+        is_management_fee: li.is_management_fee ?? false,
         sort_order: idx,
       }))
     );

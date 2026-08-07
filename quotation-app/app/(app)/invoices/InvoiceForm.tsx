@@ -6,6 +6,7 @@ import { updateInvoice, createInvoice, uploadExternalQuoteFile } from "./actions
 import { formatMoney, computeTotals, addDaysToDateString } from "@/lib/format";
 import type { LineItemInput } from "../quotes/actions";
 import { useFormDirty } from "@/lib/forms/FormDirtyContext";
+import { applyManagementFee, removeManagementFee } from "@/lib/managementFee";
 
 type BillingAddressOption = { id: string; client_id?: string; label: string; address: string };
 
@@ -15,6 +16,7 @@ type ClientOption = {
   default_currency: string;
   default_gst_rate: number;
   default_payment_terms_days: number | null;
+  default_management_fee_rate: number | null;
   display_currency_preference: string;
   billing_address: string | null;
 };
@@ -70,6 +72,10 @@ export default function InvoiceForm({
   const [currency, setCurrency] = useState(initialCurrency);
   const [gstRate, setGstRate] = useState(initialGstRate);
   const [gstApplicable, setGstApplicable] = useState(initialGstApplicable);
+  const [managementFeeRate, setManagementFeeRate] = useState(
+    clients?.[0]?.default_management_fee_rate ?? 0
+  );
+  const [managementFeeApplied, setManagementFeeApplied] = useState(false);
   const [dueDate, setDueDate] = useState(initial?.due_date || dueDateForClient(clients?.[0]));
   const [reference, setReference] = useState(initial?.reference || "");
   const [warningDismissed, setWarningDismissed] = useState(false);
@@ -130,11 +136,28 @@ export default function InvoiceForm({
     if (c) {
       setCurrency(c.default_currency);
       setGstRate(c.default_gst_rate);
+      setManagementFeeRate(c.default_management_fee_rate ?? 0);
       setDisplayCurrency((c.display_currency_preference as "original" | "sgd") || "original");
       setBillingAddressSelection("__default__");
       setBillingAddressText(c.billing_address || "");
       setDueDate(dueDateForClient(c));
     }
+  }
+
+  function handleManagementFeeToggle(checked: boolean) {
+    setManagementFeeApplied(checked);
+    setLineItems((items) =>
+      checked
+        ? applyManagementFee(items, managementFeeRate)
+        : removeManagementFee(items, managementFeeRate)
+    );
+  }
+
+  function handleManagementFeeRateChange(rate: number) {
+    if (managementFeeApplied) {
+      setLineItems((items) => applyManagementFee(removeManagementFee(items, managementFeeRate), rate));
+    }
+    setManagementFeeRate(rate);
   }
 
   function handleFileSelected(file: File | null) {
@@ -163,7 +186,13 @@ export default function InvoiceForm({
   }
 
   function removeLine(idx: number) {
-    setLineItems((items) => items.filter((_, i) => i !== idx));
+    setLineItems((items) => {
+      if (isCreating && items[idx]?.is_management_fee) {
+        setManagementFeeApplied(false);
+        return removeManagementFee(items, managementFeeRate);
+      }
+      return items.filter((_, i) => i !== idx);
+    });
   }
 
   function handleBillingAddressSelect(value: string) {
@@ -220,6 +249,8 @@ export default function InvoiceForm({
           internal_notes: internalNotes || null,
           external_quote_status: externalQuoteStatus!,
           external_quote_number: externalQuoteNumber || null,
+          management_fee_rate: managementFeeApplied ? managementFeeRate : null,
+          management_fee_applied: managementFeeApplied,
           line_items: lineItems.filter((li) => li.description.trim() !== ""),
         });
 
@@ -350,6 +381,39 @@ export default function InvoiceForm({
         </label>
       )}
 
+      {isCreating && (
+        <div className="row">
+          <div>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={managementFeeApplied}
+                onChange={(e) => handleManagementFeeToggle(e.target.checked)}
+              />
+              Apply management fee
+            </label>
+          </div>
+          {managementFeeApplied && (
+            <div>
+              <label htmlFor="management_fee_rate">Management fee %</label>
+              <input
+                id="management_fee_rate"
+                type="number"
+                step="0.01"
+                value={managementFeeRate}
+                onChange={(e) => handleManagementFeeRateChange(Number(e.target.value))}
+              />
+            </div>
+          )}
+        </div>
+      )}
+      {isCreating && managementFeeApplied && (
+        <p className="subtitle" style={{ marginTop: -8, marginBottom: 12 }}>
+          The fee is carved out of the line items above at their current amounts. If you add
+          or edit line items afterward, toggle the fee off and back on to recompute it.
+        </p>
+      )}
+
       {isCreating && externalQuoteStatus === "has_external_quote" && (
         <>
           <label htmlFor="external_quote_number">External quotation number</label>
@@ -467,7 +531,7 @@ export default function InvoiceForm({
                   onClick={() => removeLine(idx)}
                   type="button"
                 >
-                  Remove
+                  {li.is_management_fee ? "Unapply" : "Remove"}
                 </button>
               </td>
             </tr>

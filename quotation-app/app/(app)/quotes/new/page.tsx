@@ -7,7 +7,7 @@ export default async function NewQuotePage() {
     supabase
       .from("clients")
       .select(
-        "id, name, default_currency, default_gst_rate, display_currency_preference, billing_address"
+        "id, name, default_currency, default_gst_rate, default_management_fee_rate, display_currency_preference, billing_address"
       )
       .order("name"),
     supabase.from("client_billing_addresses").select("id, client_id, label, address"),

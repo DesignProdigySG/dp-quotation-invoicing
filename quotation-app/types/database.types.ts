@@ -62,6 +62,7 @@ export type Database = {
           created_at: string
           default_currency: string
           default_gst_rate: number
+          default_management_fee_rate: number | null
           default_payment_terms_days: number | null
           display_currency_preference: string
           id: string
@@ -80,6 +81,7 @@ export type Database = {
           created_at?: string
           default_currency?: string
           default_gst_rate?: number
+          default_management_fee_rate?: number | null
           default_payment_terms_days?: number | null
           display_currency_preference?: string
           id?: string
@@ -98,6 +100,7 @@ export type Database = {
           created_at?: string
           default_currency?: string
           default_gst_rate?: number
+          default_management_fee_rate?: number | null
           default_payment_terms_days?: number | null
           display_currency_preference?: string
           id?: string
@@ -224,6 +227,7 @@ export type Database = {
           description: string
           id: string
           invoice_id: string
+          is_management_fee: boolean
           quantity: number
           sort_order: number
           unit_price: number
@@ -232,6 +236,7 @@ export type Database = {
           description: string
           id?: string
           invoice_id: string
+          is_management_fee?: boolean
           quantity?: number
           sort_order?: number
           unit_price?: number
@@ -240,6 +245,7 @@ export type Database = {
           description?: string
           id?: string
           invoice_id?: string
+          is_management_fee?: boolean
           quantity?: number
           sort_order?: number
           unit_price?: number
@@ -273,6 +279,8 @@ export type Database = {
           internal_notes: string | null
           invoice_date: string
           invoice_number: string | null
+          management_fee_applied: boolean
+          management_fee_rate: number | null
           notes: string | null
           owner_id: string
           quotation_id: string | null
@@ -303,6 +311,8 @@ export type Database = {
           internal_notes?: string | null
           invoice_date?: string
           invoice_number?: string | null
+          management_fee_applied?: boolean
+          management_fee_rate?: number | null
           notes?: string | null
           owner_id: string
           quotation_id?: string | null
@@ -333,6 +343,8 @@ export type Database = {
           internal_notes?: string | null
           invoice_date?: string
           invoice_number?: string | null
+          management_fee_applied?: boolean
+          management_fee_rate?: number | null
           notes?: string | null
           owner_id?: string
           quotation_id?: string | null
@@ -403,6 +415,7 @@ export type Database = {
         Row: {
           description: string
           id: string
+          is_management_fee: boolean
           quantity: number
           quotation_id: string
           sort_order: number
@@ -411,6 +424,7 @@ export type Database = {
         Insert: {
           description: string
           id?: string
+          is_management_fee?: boolean
           quantity?: number
           quotation_id: string
           sort_order?: number
@@ -419,6 +433,7 @@ export type Database = {
         Update: {
           description?: string
           id?: string
+          is_management_fee?: boolean
           quantity?: number
           quotation_id?: string
           sort_order?: number
@@ -448,6 +463,8 @@ export type Database = {
           gst_rate: number
           id: string
           internal_notes: string | null
+          management_fee_applied: boolean
+          management_fee_rate: number | null
           notes: string | null
           owner_id: string
           quote_date: string
@@ -475,6 +492,8 @@ export type Database = {
           gst_rate?: number
           id?: string
           internal_notes?: string | null
+          management_fee_applied?: boolean
+          management_fee_rate?: number | null
           notes?: string | null
           owner_id: string
           quote_date?: string
@@ -502,6 +521,8 @@ export type Database = {
           gst_rate?: number
           id?: string
           internal_notes?: string | null
+          management_fee_applied?: boolean
+          management_fee_rate?: number | null
           notes?: string | null
           owner_id?: string
           quote_date?: string

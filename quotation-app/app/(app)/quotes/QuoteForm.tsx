@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createQuotation, updateQuotation, type LineItemInput } from "./actions";
 import { formatMoney, computeTotals } from "@/lib/format";
+import { applyManagementFee, removeManagementFee } from "@/lib/managementFee";
 
 type ClientOption = {
   id: string;
   name: string;
   default_currency: string;
   default_gst_rate: number;
+  default_management_fee_rate: number | null;
   display_currency_preference: string;
   billing_address: string | null;
 };
@@ -47,6 +49,8 @@ export default function QuoteForm({
     title?: string | null;
     quote_number?: string | null;
     external_quote_file_path?: string | null;
+    management_fee_rate?: number | null;
+    management_fee_applied?: boolean;
     line_items: LineItemInput[];
   };
   // Only set when creating a quotation imported from an externally-built
@@ -71,6 +75,14 @@ export default function QuoteForm({
       9
   );
   const [gstApplicable, setGstApplicable] = useState(initial?.gst_applicable ?? true);
+  const [managementFeeRate, setManagementFeeRate] = useState(
+    initial?.management_fee_rate ??
+      clients.find((c) => c.id === clientId)?.default_management_fee_rate ??
+      0
+  );
+  const [managementFeeApplied, setManagementFeeApplied] = useState(
+    initial?.management_fee_applied ?? false
+  );
   const [exchangeRate, setExchangeRate] = useState<number | "">(
     initial?.exchange_rate ?? ""
   );
@@ -108,6 +120,7 @@ export default function QuoteForm({
       if (c) {
         setCurrency(c.default_currency);
         setGstRate(c.default_gst_rate);
+        setManagementFeeRate(c.default_management_fee_rate ?? 0);
         setDisplayCurrency(
           (c.display_currency_preference as "original" | "sgd") || "original"
         );
@@ -115,6 +128,22 @@ export default function QuoteForm({
         setBillingAddressText(c.billing_address || "");
       }
     }
+  }
+
+  function handleManagementFeeToggle(checked: boolean) {
+    setManagementFeeApplied(checked);
+    setLineItems((items) =>
+      checked
+        ? applyManagementFee(items, managementFeeRate)
+        : removeManagementFee(items, managementFeeRate)
+    );
+  }
+
+  function handleManagementFeeRateChange(rate: number) {
+    if (managementFeeApplied) {
+      setLineItems((items) => applyManagementFee(removeManagementFee(items, managementFeeRate), rate));
+    }
+    setManagementFeeRate(rate);
   }
 
   function handleBillingAddressSelect(value: string) {
@@ -138,7 +167,13 @@ export default function QuoteForm({
   }
 
   function removeLine(idx: number) {
-    setLineItems((items) => items.filter((_, i) => i !== idx));
+    setLineItems((items) => {
+      if (items[idx]?.is_management_fee) {
+        setManagementFeeApplied(false);
+        return removeManagementFee(items, managementFeeRate);
+      }
+      return items.filter((_, i) => i !== idx);
+    });
   }
 
   const isForeignCurrency = currency.toUpperCase() !== "SGD";
@@ -179,6 +214,8 @@ export default function QuoteForm({
         title: title || null,
         quote_number: quoteNumber || null,
         external_quote_file_path: effectiveSourceFilePath,
+        management_fee_rate: managementFeeApplied ? managementFeeRate : null,
+        management_fee_applied: managementFeeApplied,
         line_items: lineItems.filter((li) => li.description.trim() !== ""),
       };
       if (quoteId) {
@@ -276,6 +313,37 @@ export default function QuoteForm({
         Apply GST
       </label>
 
+      <div className="row">
+        <div>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={managementFeeApplied}
+              onChange={(e) => handleManagementFeeToggle(e.target.checked)}
+            />
+            Apply management fee
+          </label>
+        </div>
+        {managementFeeApplied && (
+          <div>
+            <label htmlFor="management_fee_rate">Management fee %</label>
+            <input
+              id="management_fee_rate"
+              type="number"
+              step="0.01"
+              value={managementFeeRate}
+              onChange={(e) => handleManagementFeeRateChange(Number(e.target.value))}
+            />
+          </div>
+        )}
+      </div>
+      {managementFeeApplied && (
+        <p className="subtitle" style={{ marginTop: -8, marginBottom: 12 }}>
+          The fee is carved out of the line items above at their current amounts. If you add
+          or edit line items afterward, toggle the fee off and back on to recompute it.
+        </p>
+      )}
+
       <label htmlFor="billing_address_select">Bill-to address</label>
       <select
         id="billing_address_select"
@@ -371,7 +439,7 @@ export default function QuoteForm({
                   onClick={() => removeLine(idx)}
                   type="button"
                 >
-                  Remove
+                  {li.is_management_fee ? "Unapply" : "Remove"}
                 </button>
               </td>
             </tr>

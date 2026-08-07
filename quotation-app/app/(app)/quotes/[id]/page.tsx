@@ -26,7 +26,7 @@ export default async function QuoteDetailPage({
       supabase
         .from("clients")
         .select(
-          "id, name, default_currency, default_gst_rate, display_currency_preference, billing_address"
+          "id, name, default_currency, default_gst_rate, default_management_fee_rate, display_currency_preference, billing_address"
         )
         .order("name"),
       supabase.from("client_billing_addresses").select("id, client_id, label, address"),
@@ -46,6 +46,7 @@ export default async function QuoteDetailPage({
       description: li.description,
       quantity: li.quantity,
       unit_price: li.unit_price,
+      is_management_fee: li.is_management_fee,
     }));
 
   return (
@@ -99,6 +100,8 @@ export default async function QuoteDetailPage({
           title: quotation.title,
           quote_number: quotation.quote_number,
           external_quote_file_path: quotation.external_quote_file_path,
+          management_fee_rate: quotation.management_fee_rate,
+          management_fee_applied: quotation.management_fee_applied,
           line_items: lineItems,
         }}
       />

@@ -19,6 +19,7 @@ export type LineItemInput = {
   description: string;
   quantity: number;
   unit_price: number;
+  is_management_fee?: boolean;
 };
 
 export type QuotationInput = {
@@ -35,6 +36,8 @@ export type QuotationInput = {
   internal_notes?: string | null;
   valid_until?: string | null;
   title?: string | null;
+  management_fee_rate?: number | null;
+  management_fee_applied?: boolean;
   // Only relevant for a quotation imported from an externally-built
   // document (see extractQuotationFromUpload below) — normal
   // create/edit flows never set either. quote_number is otherwise never
@@ -74,6 +77,8 @@ export async function createQuotation(input: QuotationInput) {
       title: input.title || null,
       quote_number: input.quote_number || null,
       external_quote_file_path: input.external_quote_file_path || null,
+      management_fee_rate: input.management_fee_rate ?? null,
+      management_fee_applied: input.management_fee_applied ?? false,
     })
     .select()
     .single();
@@ -87,6 +92,7 @@ export async function createQuotation(input: QuotationInput) {
         description: li.description,
         quantity: li.quantity,
         unit_price: li.unit_price,
+        is_management_fee: li.is_management_fee ?? false,
         sort_order: idx,
       }))
     );
@@ -119,6 +125,8 @@ export async function updateQuotation(id: string, input: QuotationInput) {
       title: input.title || null,
       quote_number: input.quote_number || null,
       external_quote_file_path: input.external_quote_file_path || null,
+      management_fee_rate: input.management_fee_rate ?? null,
+      management_fee_applied: input.management_fee_applied ?? false,
     })
     .eq("id", id);
   if (error) throw new Error(error.message);
@@ -136,6 +144,7 @@ export async function updateQuotation(id: string, input: QuotationInput) {
         description: li.description,
         quantity: li.quantity,
         unit_price: li.unit_price,
+        is_management_fee: li.is_management_fee ?? false,
         sort_order: idx,
       }))
     );
@@ -280,6 +289,8 @@ export async function convertQuotationToInvoice(quotationId: string) {
       notes: quotation.notes,
       internal_notes: quotation.internal_notes,
       due_date: dueDate,
+      management_fee_rate: quotation.management_fee_rate,
+      management_fee_applied: quotation.management_fee_applied,
     })
     .select()
     .single();
@@ -290,6 +301,7 @@ export async function convertQuotationToInvoice(quotationId: string) {
     description: string;
     quantity: number;
     unit_price: number;
+    is_management_fee: boolean;
     sort_order: number;
   }[];
 
@@ -300,6 +312,7 @@ export async function convertQuotationToInvoice(quotationId: string) {
         description: li.description,
         quantity: li.quantity,
         unit_price: li.unit_price,
+        is_management_fee: li.is_management_fee,
         sort_order: li.sort_order,
       }))
     );

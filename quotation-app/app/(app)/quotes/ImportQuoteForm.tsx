@@ -9,6 +9,7 @@ type ClientOption = {
   name: string;
   default_currency: string;
   default_gst_rate: number;
+  default_management_fee_rate: number | null;
   display_currency_preference: string;
   billing_address: string | null;
 };
