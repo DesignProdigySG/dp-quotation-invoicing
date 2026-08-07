@@ -1644,3 +1644,72 @@ new failure: the link now correctly reached the real domain, but landed on
   live** — the link in the screenshot that surfaced this bug is already
   burned either way, so testing needs a freshly-requested reset email; see
   `docs/cherylhandoff.md`.
+
+## Decision 33: Management fee rate feature, plus a repo-wide broken-migration-history bug found and fixed
+
+Session covering three follow-on requests in one sitting.
+
+1. **Implemented `clients.default_management_fee_rate`** (checked
+   `docs/cherylhandoff.md` per request; not there, not implemented anywhere
+   in the repo or either database). Per-client default management fee %,
+   applied per quotation/invoice via a toggle: applying it carves the fee
+   out of the existing line items rather than adding it on top (e.g. 2% on
+   a $5,000 line splits into $4,900 + $100 "Management fee", computed
+   before GST), so the document total is unchanged. New columns:
+   `clients.default_management_fee_rate`; `quotations`/`invoices`
+   `.management_fee_rate`/`.management_fee_applied`;
+   `quotation_line_items`/`invoice_line_items`.`is_management_fee`.
+   Branch: `claude/default-management-fee-rate-2kd04v`. Migration applied
+   to staging first, then production once confirmed.
+
+2. **PR #38** (`claude/dp-quotation-invoicing-overview-l5rpsp`, a separate
+   "client-funds ledger" design — deposits/drawdowns/pools) turned out to
+   have a failing Supabase Preview check, and to independently add the
+   exact same `clients.default_management_fee_rate` column for a
+   related-but-different purpose (deducted from a ledger deposit, rather
+   than split across quotation/invoice line items).
+
+3. **Root-caused and fixed a repo-wide migration bug**: nearly every
+   migration file in `supabase/migrations/` (everything before 2026-08-06,
+   ~25 files) was a comment-only placeholder — the real DDL had been
+   applied directly to production over many past sessions, before
+   migrations were git-tracked, and each placeholder exists solely so its
+   version number matches `supabase_migrations.schema_migrations` (so the
+   GitHub integration wouldn't try to re-run it). Harmless for
+   production/staging (an already-applied version never re-runs), but it
+   meant **every fresh Supabase branch build — every PR preview, ever —
+   was silently broken**: replaying an all-comments history against an
+   empty database never created `clients` or any other table, so the first
+   real `ALTER TABLE` after it failed with "relation does not exist".
+   Reconstructed the real bootstrap DDL (all 14 tables, constraints,
+   indexes, RLS policies, functions, triggers, sequences) via direct
+   introspection of production's live schema, verified it by spinning up a
+   genuinely fresh temporary Supabase branch and confirming full parity
+   (37/37 RLS policies, all columns), then pushed the fix to both branches
+   above. Had to close/reopen PR #38 to force Supabase to actually replay
+   the edited file — a plain push only re-sends *new* migration versions,
+   not edits to already-seen ones.
+
+4. **Reconciled the column collision**: rather than rename either column,
+   made both migrations' `clients.default_management_fee_rate` creation
+   idempotent (`ADD COLUMN IF NOT EXISTS`), since the two features turned
+   out to want the same underlying concept (a client's management fee %)
+   just consumed differently. Whichever branch merges first creates the
+   column; the other becomes a no-op, independent of merge order —
+   verified against a fresh branch build afterward.
+
+5. **Checked the forgot-password/reset-password feature (Decision 29) for
+   a "forgotten" schema migration** — none exists to forget. That feature
+   is entirely Supabase Auth's built-in APIs plus dashboard config (email
+   template, Site URL — already confirmed applied to both environments
+   per Decision 30's addendum); no `public`-schema table or column was
+   ever part of it. Also confirmed staging (`zisxldwvwwddyuorbhnb`) and
+   production (`gkkwxjxdcifjuwxgdpug`) `public` schemas are currently
+   fully identical, column-for-column.
+
+**Still open**: neither `claude/default-management-fee-rate-2kd04v` nor
+PR #38 has been merged to `main` yet, so `main`'s own migration history
+still has the placeholder-only version of
+`20260720040549_initial_schema.sql` until one of them merges. Until then,
+any *other* new PR/branch cut from `main` will still hit the original
+"fresh branch build" failure. See `docs/cherylhandoff.md`.

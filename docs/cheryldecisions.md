@@ -32,6 +32,23 @@ else, doesn't need to stay in sync with anything.
   document total is unchanged. Migration applied to staging only so far —
   production is pending confirmation. Branch:
   `claude/default-management-fee-rate-2kd04v`.
+- **Migrated the management-fee-rate schema to production** — was
+  staging-only when last logged; now live on both. Full detail:
+  `docs/DECISIONS.md` Decision 33.
+- **Found and fixed a repo-wide bug**: ~25 migration files (everything
+  before 2026-08-06) were content-free placeholders, silently breaking
+  every fresh Supabase branch build (every PR preview, ever). Reconstructed
+  real bootstrap DDL from production, verified via a temporary branch,
+  pushed to both this branch and PR #38. Full detail: `docs/DECISIONS.md`
+  Decision 33.
+- **Fixed PR #38's Supabase Preview** (the placeholder-migration bug above)
+  and reconciled a `clients.default_management_fee_rate` column collision
+  between this branch and PR #38 by making both migrations idempotent.
+  Full detail: `docs/DECISIONS.md` Decision 33.
+- **Checked forgot-password (Decision 29) for a missed production
+  migration** — confirmed there was never any schema for it to migrate
+  (Auth built-in only); also confirmed staging/production `public` schemas
+  are now fully identical.
 
 ---
 

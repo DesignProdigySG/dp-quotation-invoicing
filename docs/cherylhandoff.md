@@ -42,11 +42,15 @@ pick up directly instead of re-deriving context.
 - `docs/HANDOFF.md`'s "Staging environment & migration workflow" section is
   now stale (still describes staging as "planned, blocked on a billing
   upgrade") — needs updating by Cheryl or a future session, not this one.
-- **Management fee migration only applied to staging**
-  (`zisxldwvwwddyuorbhnb`) — `20260806154221_add_management_fee_rate.sql`
-  adds `default_management_fee_rate` to `clients` and
-  `management_fee_rate`/`management_fee_applied` to `quotations`/`invoices`
-  plus `is_management_fee` to both line-item tables. Per the migration
-  policy above, push the identical SQL to production
-  (`gkkwxjxdcifjuwxgdpug`) once the feature's been tried on staging and
-  confirmed good.
+- ~~Management fee migration only applied to staging~~ — **done**, pushed
+  to production too (2026-08-07).
+- **Repo-wide placeholder-migration fix not yet on `main`** —
+  `20260720040549_initial_schema.sql` was a comment-only placeholder for
+  nearly the whole repo history, breaking every fresh Supabase branch
+  build (PR previews). Reconstructed real DDL and pushed the fix to both
+  `claude/default-management-fee-rate-2kd04v` and PR #38's branch, but
+  neither has merged to `main` yet — until one does, any *other* new
+  PR/branch cut from `main` will still hit the original failure. Also made
+  `clients.default_management_fee_rate` idempotent on both branches (PR
+  #38 adds the same column independently, for its client-funds-ledger
+  deposit-fee use case) so merge order won't matter.
