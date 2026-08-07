@@ -22,6 +22,17 @@ else, doesn't need to stay in sync with anything.
   now requires a real button click before verifying. Full detail:
   `docs/DECISIONS.md` Decision 32.
 
+## 2026-08-07
+
+- **Implemented `default_management_fee_rate`** — added a per-client default
+  management fee rate (`clients.default_management_fee_rate`), with a
+  per-quotation/invoice apply toggle + rate. Applying it carves the fee out
+  of the existing line items (e.g. 2% on a $5,000 line splits into $4,900 +
+  $100 "Management fee", before GST) rather than adding it on top, so the
+  document total is unchanged. Migration applied to staging only so far —
+  production is pending confirmation. Branch:
+  `claude/default-management-fee-rate-2kd04v`.
+
 ---
 
 Add new entries above this line as I make more changes.

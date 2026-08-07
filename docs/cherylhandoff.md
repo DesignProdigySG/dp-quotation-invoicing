@@ -42,3 +42,11 @@ pick up directly instead of re-deriving context.
 - `docs/HANDOFF.md`'s "Staging environment & migration workflow" section is
   now stale (still describes staging as "planned, blocked on a billing
   upgrade") — needs updating by Cheryl or a future session, not this one.
+- **Management fee migration only applied to staging**
+  (`zisxldwvwwddyuorbhnb`) — `20260806154221_add_management_fee_rate.sql`
+  adds `default_management_fee_rate` to `clients` and
+  `management_fee_rate`/`management_fee_applied` to `quotations`/`invoices`
+  plus `is_management_fee` to both line-item tables. Per the migration
+  policy above, push the identical SQL to production
+  (`gkkwxjxdcifjuwxgdpug`) once the feature's been tried on staging and
+  confirmed good.
