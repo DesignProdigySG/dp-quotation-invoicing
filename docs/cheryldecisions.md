@@ -21,6 +21,11 @@ else, doesn't need to stay in sync with anything.
   link scanners were consuming the one-time token before the real click;
   now requires a real button click before verifying. Full detail:
   `docs/DECISIONS.md` Decision 32.
+- **Merged PR #37 to `main`** — password reset flow + the auth-confirm fix
+  are live on production.
+- **Fixed the "Confirm signup" template and Site URL** myself — tested on
+  staging first, then applied the same fix to production. Full detail:
+  `docs/DECISIONS.md` Decision 30 (resolution addendum).
 
 ## 2026-08-07
 

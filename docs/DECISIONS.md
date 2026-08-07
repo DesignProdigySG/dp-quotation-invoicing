@@ -1502,6 +1502,17 @@ latency on the next request, not data loss). Only remaining step is
 Vercel-side and has to be done by the user directly: splitting Preview's
 Supabase env vars from Production's.
 
+**Confirmed done, 2026-08-06**: verified directly via Vercel's Environment
+Variables page (Cheryl provided screenshots) rather than assumed —
+`NEXT_PUBLIC_SUPABASE_URL` is `gkkwxjxdcifjuwxgdpug` for **Production** and
+`zisxldwvwwddyuorbhnb` for **Preview**, with `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+and `SUPABASE_SERVICE_ROLE_KEY` both separately scoped to Preview too (all
+three added 3 days prior to this check, i.e. already done before this was
+even flagged as outstanding here). The `staging` Supabase branch is
+confirmed still linked in Vercel's branch switcher. `docs/HANDOFF.md`'s
+"⬜ Still needed" line for this is stale — the whole staging setup is
+actually fully wired up, not just partially.
+
 ## Decision 29: Forgot password / reset password flow
 
 Shipped `/forgot-password` and `/reset-password` pages using Supabase Auth's
@@ -1565,6 +1576,12 @@ code controls or can verify on its own.
   /recover`). It's rate-limited for testing only; a real SMTP provider
   (Authentication → Email → SMTP Settings) is needed before relying on
   these emails for real usage volume, not just occasional manual tests.
+- **Resolved 2026-08-05**: the "Confirm signup" template and Site URL fixes
+  above were applied by Cheryl directly — fixed on staging first, verified
+  working there, then the identical fix ported to production. Confirmed
+  working end to end on production afterward (no more `localhost:3000`
+  redirects, confirm/reset links land correctly). Both open items from this
+  decision are closed.
 
 ## Decision 31: `zisxldwvwwddyuorbhnb` confirmed as the staging Supabase project
 
