@@ -112,6 +112,131 @@ export type Database = {
         }
         Relationships: []
       }
+      deposits: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          deposit_date: string
+          exchange_rate: number | null
+          fee_amount: number
+          fee_rate: number
+          id: string
+          invoice_id: string | null
+          net_amount: number
+          owner_id: string
+          pool_id: string
+          purpose: string | null
+          sgd_amount: number
+          status: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency: string
+          deposit_date?: string
+          exchange_rate?: number | null
+          fee_amount: number
+          fee_rate: number
+          id?: string
+          invoice_id?: string | null
+          net_amount: number
+          owner_id: string
+          pool_id: string
+          purpose?: string | null
+          sgd_amount: number
+          status?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          deposit_date?: string
+          exchange_rate?: number | null
+          fee_amount?: number
+          fee_rate?: number
+          id?: string
+          invoice_id?: string | null
+          net_amount?: number
+          owner_id?: string
+          pool_id?: string
+          purpose?: string | null
+          sgd_amount?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposits_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposits_pool_id_fkey"
+            columns: ["pool_id"]
+            isOneToOne: false
+            referencedRelation: "pools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drawdowns: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          description: string | null
+          drawdown_date: string
+          exchange_rate: number | null
+          id: string
+          is_internal: boolean
+          notes: string | null
+          owner_id: string
+          pool_id: string
+          sgd_amount: number
+          vendor_name: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency: string
+          description?: string | null
+          drawdown_date?: string
+          exchange_rate?: number | null
+          id?: string
+          is_internal?: boolean
+          notes?: string | null
+          owner_id: string
+          pool_id: string
+          sgd_amount: number
+          vendor_name: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          description?: string | null
+          drawdown_date?: string
+          exchange_rate?: number | null
+          id?: string
+          is_internal?: boolean
+          notes?: string | null
+          owner_id?: string
+          pool_id?: string
+          sgd_amount?: number
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drawdowns_pool_id_fkey"
+            columns: ["pool_id"]
+            isOneToOne: false
+            referencedRelation: "pools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_client_corrections: {
         Row: {
           client_id: string
@@ -368,6 +493,154 @@ export type Database = {
             columns: ["quotation_id"]
             isOneToOne: false
             referencedRelation: "quotations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pool_adjustments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          owner_id: string
+          pool_id: string
+          reason: string
+          related_deposit_id: string | null
+          related_drawdown_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          owner_id: string
+          pool_id: string
+          reason: string
+          related_deposit_id?: string | null
+          related_drawdown_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          owner_id?: string
+          pool_id?: string
+          reason?: string
+          related_deposit_id?: string | null
+          related_drawdown_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pool_adjustments_pool_id_fkey"
+            columns: ["pool_id"]
+            isOneToOne: false
+            referencedRelation: "pools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pool_adjustments_related_deposit_id_fkey"
+            columns: ["related_deposit_id"]
+            isOneToOne: false
+            referencedRelation: "deposits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pool_adjustments_related_drawdown_id_fkey"
+            columns: ["related_drawdown_id"]
+            isOneToOne: false
+            referencedRelation: "drawdowns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pool_transfers: {
+        Row: {
+          amount: number
+          created_at: string
+          from_pool_id: string
+          id: string
+          owner_id: string
+          reason: string | null
+          to_pool_id: string
+          transfer_date: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          from_pool_id: string
+          id?: string
+          owner_id: string
+          reason?: string | null
+          to_pool_id: string
+          transfer_date?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          from_pool_id?: string
+          id?: string
+          owner_id?: string
+          reason?: string | null
+          to_pool_id?: string
+          transfer_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pool_transfers_from_pool_id_fkey"
+            columns: ["from_pool_id"]
+            isOneToOne: false
+            referencedRelation: "pools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pool_transfers_to_pool_id_fkey"
+            columns: ["to_pool_id"]
+            isOneToOne: false
+            referencedRelation: "pools"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pools: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          parent_pool_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          parent_pool_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          parent_pool_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pools_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pools_parent_pool_id_fkey"
+            columns: ["parent_pool_id"]
+            isOneToOne: false
+            referencedRelation: "pools"
             referencedColumns: ["id"]
           },
         ]
@@ -762,7 +1035,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      pool_balance: {
+        Args: { p_pool_id: string }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
