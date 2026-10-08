@@ -1682,14 +1682,14 @@ just a theoretical risk.
   mention in a commit on any branch (checked via `git grep`/`git log --all`
   across the whole repo). It was applied directly against the live
   database, outside this repo's migration-file-first pipeline entirely.
-- **Likely explanation, not confirmed**: the schema shape
-  (`coupa_account`, `po_number`, platform-invoice reconciliation against a
-  media budget) matches the EQX Coupa PO-Invoicing n8n flow from earlier
-  work closely enough that it's probably that flow writing directly into
-  this same Supabase project as its backing store — a genuinely separate
-  system that happens to share this database, not a part of this
-  Next.js app. Logged as an open item in `docs/cherylhandoff.md` for
-  someone to actually confirm.
+- **Confirmed 2026-10-08** (Cheryl, via the user): this is a genuinely
+  separate project of hers, unrelated to the quotation/invoicing app — she
+  was just reusing this same Supabase project as convenient storage for it.
+  Not a part of this Next.js app, and never meant to go through this repo's
+  migration/staging pipeline, so there's no gap here to close. (The earlier
+  guess that it was the EQX Coupa PO-Invoicing n8n flow specifically was
+  speculation from schema shape alone and was never actually confirmed —
+  see `docs/cherylhandoff.md` for the resolved note.)
 - **Resulting conclusion**: this Supabase project is shared infrastructure
   beyond just this app. "Staging mirrors production" is only reliably true
   for schema changes that went through *this repo's own* migration files —

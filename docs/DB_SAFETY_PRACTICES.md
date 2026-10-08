@@ -44,11 +44,11 @@ app's. Four real tables (`media_budgets`, `vendor_purchase_orders`,
 `vendor_invoices`, `media_campaign_reconciliation` — 332 rows in
 `vendor_invoices` alone) exist on production with no corresponding
 migration file, no app code, and no mention in any commit on any branch.
-Schema shape (`coupa_account`, `po_number`, platform-invoice reconciliation)
-strongly suggests this is the EQX Coupa PO-Invoicing n8n flow from earlier
-work, writing directly into this Supabase project outside git and outside
-the staging pipeline entirely — not confirmed, flagged as the likely
-explanation in `docs/cherylhandoff.md`'s open items for follow-up.
+**Confirmed with Cheryl**: this is a separate project of hers, unrelated to
+this app — she was just reusing this Supabase project as convenient
+storage. Benign in this instance, but the instinct to check before touching
+an untracked table was the right one — see `docs/cherylhandoff.md` for the
+resolved note.
 
 Practical rule: before altering, dropping, or renaming anything in a table
 that doesn't have a matching file in `quotation-app/supabase/migrations/`,

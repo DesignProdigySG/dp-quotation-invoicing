@@ -305,25 +305,25 @@ a pool picker into quotation/invoice creation, deposit only counts once
    into `docs/POOLS_AND_DRAWS_DESIGN.md` proper (this handoff note is the
    working copy until then).
 
-## Open item: `money_mountain_init` and friends — production-only tables with no trace in this repo (2026-10-08)
+## Resolved: `money_mountain_init` and friends — confirmed unrelated to this app (2026-10-08)
 
 While writing up DB safety ground rules (`docs/DECISIONS.md` Decision 33,
 `docs/DB_SAFETY_PRACTICES.md`), found that production has 13 migrations
 staging doesn't, starting with `money_mountain_init`, backing 4 real tables
 (`media_budgets`, `vendor_purchase_orders`, `vendor_invoices` — 332 rows,
 `media_campaign_reconciliation`) with zero migration file, zero app code,
-zero commit history anywhere in this repo. Schema shape (`coupa_account`,
-`po_number`) strongly suggests this is the EQX Coupa PO-Invoicing n8n flow
-writing directly into this same Supabase project as its backing store —
-**not confirmed**, just the most plausible read of the evidence.
+zero commit history anywhere in this repo.
 
-Needs an actual human answer, not another guess from schema alone:
-- Confirm with Cheryl/the user what `money_mountain_init` actually is and
-  who/what writes to these tables.
-- Decide whether staging needs equivalent tables (if this is meant to be
-  part of this app's own pipeline going forward) or whether it's
-  intentionally a separate system outside the staging-first policy's scope
-  (if it's genuinely the n8n flow's own infrastructure).
-- Either way, document the answer here or in `docs/DECISIONS.md` once
-  known — don't let this sit as an open question indefinitely given it's
-  332 real rows of vendor-invoice data.
+**Confirmed directly with Cheryl (via the user)**: this is a genuinely
+separate project of hers — she was just reusing this same Supabase project
+as convenient storage for it. It has nothing to do with the quotation/
+invoicing app. (The earlier guess that this was the EQX Coupa PO-Invoicing
+n8n flow was speculation from schema shape alone and was never actually
+confirmed — don't carry that detail forward as fact.)
+
+**Practical upshot**: no action needed on staging parity — this was never
+meant to go through this app's migration-file/staging pipeline, so there's
+no gap to close. Keep treating any table without a migration file in
+`quotation-app/supabase/migrations/` as foreign per
+`docs/DB_SAFETY_PRACTICES.md` Rule 3 — this confirms that's the right
+instinct in general, even though this specific instance turned out benign.
