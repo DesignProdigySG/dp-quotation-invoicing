@@ -5,10 +5,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { addDaysToDateString } from "@/lib/format";
 import { BRAND } from "@/lib/pdf/brand";
-import { getSalesforceClientForConnection } from "@/lib/salesforce/client";
-import { findOrCreateSalesforceAccount } from "@/lib/salesforce/accounts";
-import { findOpportunityFieldByLabel } from "@/lib/salesforce/opportunityFields";
-import { generateQuotationTitle } from "@/lib/salesforce/generateQuotationTitle";
 import {
   extractQuotationFromDocument,
   type ExtractedQuotationDocument,
@@ -36,10 +32,9 @@ export type QuotationInput = {
   valid_until?: string | null;
   title?: string | null;
   // Only relevant for a quotation imported from an externally-built
-  // document (see extractQuotationFromUpload below) — normal
-  // create/edit flows never set either. quote_number is otherwise never
-  // user-editable; Decision 17 made Salesforce push the sole writer of it
-  // for a normal quotation.
+  // document (see extractQuotationFromUpload below) — normal create/edit
+  // flows never set this, since quote_number self-generates on insert via
+  // trg_set_quote_number.
   quote_number?: string | null;
   external_quote_file_path?: string | null;
   line_items: LineItemInput[];
@@ -163,61 +158,10 @@ export async function setQuotationStatus(
   revalidatePath("/board");
 }
 
-const SALESFORCE_ALREADY_DELETED_CODES = [
-  "ENTITY_IS_DELETED",
-  "NOT_FOUND",
-  "INVALID_CROSS_REFERENCE_KEY",
-];
-
 // Never throws — a thrown Server Action error is redacted to a generic
-// message in production (same reasoning as pushQuotationToSalesforce and
-// the Settings actions), so failures are returned as { error } instead.
+// message in production, so failures are returned as { error } instead.
 export async function deleteQuotation(id: string): Promise<{ error?: string }> {
   const supabase = await createClient();
-
-  const { data: quotation } = await supabase
-    .from("quotations")
-    .select("salesforce_opportunity_id")
-    .eq("id", id)
-    .maybeSingle();
-
-  // Delete the Opportunity only — Quote is its child and gets cascaded
-  // (both land in Salesforce's Recycle Bin together). The Account is
-  // deliberately left alone: it's shared across potentially many
-  // quotations/deals for that client, so this app should never delete it
-  // as a side effect of removing one quotation. If this fails, block the
-  // local delete rather than silently drifting out of sync with Salesforce —
-  // except when the Opportunity is already gone (e.g. deleted directly in
-  // Salesforce first), which isn't a failure at all, since the goal (no
-  // Opportunity) is already achieved.
-  if (quotation?.salesforce_opportunity_id) {
-    try {
-      const { conn } = await getSalesforceClientForConnection();
-      const result = await conn
-        .sobject("Opportunity")
-        .destroy(quotation.salesforce_opportunity_id);
-      if (!result.success) {
-        const errorCode = result.errors[0]?.errorCode;
-        if (!errorCode || !SALESFORCE_ALREADY_DELETED_CODES.includes(errorCode)) {
-          return { error: result.errors[0]?.message || "Salesforce rejected the delete" };
-        }
-      }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      // jsforce/Salesforce errors thrown this way (as opposed to a SaveResult
-      // with a structured errorCode) carry a lowercase, space-separated
-      // human message like "entity is deleted" rather than the
-      // ENTITY_IS_DELETED-style code — confirmed directly from a real
-      // failure, not guessed. Normalize both sides before comparing.
-      const normalizedMessage = message.toLowerCase();
-      const alreadyGone = SALESFORCE_ALREADY_DELETED_CODES.some((code) =>
-        normalizedMessage.includes(code.toLowerCase().replace(/_/g, " "))
-      );
-      if (!alreadyGone) {
-        return { error: `Failed to delete linked Salesforce Opportunity: ${message}` };
-      }
-    }
-  }
 
   // Two FKs into quotations default to NO ACTION rather than SET NULL like
   // invoices.quotation_id already does (confirmed directly against the live
@@ -318,181 +262,6 @@ export async function convertQuotationToInvoice(quotationId: string) {
   return invoice;
 }
 
-// Never throws — same convention as pushInvoiceToXero: failures are returned
-// as { error } and also persisted onto the quotation row
-// (salesforce_push_error) so the state survives a page refresh. Pushes an
-// empty Quote (no QuoteLineItem rows) under a newly-created Opportunity in
-// an open stage — confirmed with the user that Salesforce is used purely as
-// a quote-number generator here, matching their own existing manual
-// convention of unlined "Quote 1" records. The Opportunity is deliberately
-// left open; it only flips to Closed Won later via
-// syncOpportunityStageForInvoice, once a PO is matched AND the invoice is
-// sent (see lib/salesforce/opportunityStage.ts).
-const OPPORTUNITY_OWNER_FIELD_LABEL = "Opportunity Owner (Custom)";
-const CROSS_SELL_FIELD_LABEL = "Cross-sell Opportunity?";
-
-export async function pushQuotationToSalesforce(
-  quotationId: string
-): Promise<{ error?: string }> {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not signed in" };
-
-  const { data: quotation, error: fetchError } = await supabase
-    .from("quotations")
-    .select("*, clients(id, name, salesforce_account_id), quotation_line_items(*)")
-    .eq("id", quotationId)
-    .single();
-
-  if (fetchError || !quotation) {
-    return { error: "Quotation not found" };
-  }
-
-  if (quotation.salesforce_quote_id) {
-    return { error: "This quotation has already been pushed to Salesforce" };
-  }
-
-  if (quotation.external_quote_file_path) {
-    return {
-      error: "This quotation was imported from an external file and can't be pushed to Salesforce.",
-    };
-  }
-
-  const client = (quotation as any).clients as {
-    id: string;
-    name: string;
-    salesforce_account_id: string | null;
-  } | null;
-  if (!client) {
-    return { error: "This quotation has no client on record" };
-  }
-
-  const lineItems = ((quotation as any).quotation_line_items || []) as {
-    description: string;
-    quantity: number;
-    unit_price: number;
-  }[];
-  const amount = lineItems.reduce((sum, li) => sum + li.quantity * li.unit_price, 0);
-
-  async function recordFailure(message: string) {
-    await supabase
-      .from("quotations")
-      .update({ salesforce_push_error: message })
-      .eq("id", quotationId);
-    return { error: message };
-  }
-
-  const { data: pusherProfile } = await supabase
-    .from("profiles")
-    .select("dp_bubble")
-    .eq("owner_id", user.id)
-    .maybeSingle();
-  if (!pusherProfile?.dp_bubble) {
-    return await recordFailure("Set your DP Bubble in Settings before pushing to Salesforce");
-  }
-  const dpBubble = pusherProfile.dp_bubble;
-
-  try {
-    const { conn } = await getSalesforceClientForConnection();
-
-    const accountId = await findOrCreateSalesforceAccount(conn, client);
-
-    const ownerField = await findOpportunityFieldByLabel(conn, OPPORTUNITY_OWNER_FIELD_LABEL);
-    if (!ownerField) {
-      return await recordFailure(
-        `Could not find the "${OPPORTUNITY_OWNER_FIELD_LABEL}" field in Salesforce`
-      );
-    }
-
-    const crossSellField = await findOpportunityFieldByLabel(conn, CROSS_SELL_FIELD_LABEL);
-    if (!crossSellField) {
-      return await recordFailure(
-        `Could not find the "${CROSS_SELL_FIELD_LABEL}" field in Salesforce`
-      );
-    }
-    let crossSellNoValue: string | boolean;
-    if (crossSellField.type === "boolean") {
-      crossSellNoValue = false;
-    } else {
-      const noOption = crossSellField.picklistValues.find(
-        (pv) => pv.label.trim().toLowerCase() === "no"
-      );
-      if (!noOption) {
-        return await recordFailure(
-          `Could not determine the "No" value for "${CROSS_SELL_FIELD_LABEL}"`
-        );
-      }
-      crossSellNoValue = noOption.value;
-    }
-
-    // A manually-set title always wins; otherwise fall back to a cheap AI
-    // gist of the line items, persisted below so it's not regenerated (and
-    // is visible/editable afterward) rather than recomputed on every call.
-    const gist = quotation.title || (await generateQuotationTitle(lineItems, quotation.notes));
-
-    const opportunityName = [client.name, gist, new Date(quotation.quote_date).getFullYear()]
-      .filter(Boolean)
-      .join(" - ");
-
-    const opportunity = await conn.sobject("Opportunity").create({
-      Name: opportunityName,
-      AccountId: accountId,
-      // Left open on purpose — see function comment above. "Proposal/Price
-      // Quote" is a standard picklist value; if this org uses a different
-      // set of stage names, the real Salesforce error will name the valid
-      // ones and this is a one-line fix.
-      StageName: "Proposal/Price Quote",
-      CloseDate: quotation.valid_until ?? quotation.quote_date,
-      Amount: amount,
-      [ownerField.name]: dpBubble,
-      [crossSellField.name]: crossSellNoValue,
-    });
-    if (!opportunity.success) {
-      return await recordFailure(
-        opportunity.errors[0]?.message || "Salesforce rejected the Opportunity"
-      );
-    }
-
-    const quote = await conn.sobject("Quote").create({
-      Name: "Quote 1",
-      OpportunityId: opportunity.id,
-    });
-    if (!quote.success) {
-      return await recordFailure(quote.errors[0]?.message || "Salesforce rejected the Quote");
-    }
-
-    const created = await conn.sobject("Quote").retrieve(quote.id);
-    const quoteNumber =
-      (created as { Custom_quote_number__c?: string }).Custom_quote_number__c ?? null;
-
-    const { error: updateError } = await supabase
-      .from("quotations")
-      .update({
-        salesforce_quote_id: quote.id,
-        salesforce_quote_number: quoteNumber,
-        salesforce_opportunity_id: opportunity.id,
-        salesforce_pushed_at: new Date().toISOString(),
-        salesforce_push_error: null,
-        // Salesforce is the source of truth for the quote number now — this
-        // is what makes every existing display site (quotes list/detail,
-        // the PDF route, the board) show the real number automatically.
-        quote_number: quoteNumber || quotation.quote_number,
-        title: gist,
-      })
-      .eq("id", quotationId);
-    if (updateError) return { error: updateError.message };
-
-    revalidatePath(`/quotes/${quotationId}`);
-    revalidatePath("/quotes");
-    return {};
-  } catch (e) {
-    return await recordFailure(e instanceof Error ? e.message : "Failed to push to Salesforce");
-  }
-}
-
 const ALLOWED_IMPORT_FILE_TYPES = [
   "image/png",
   "image/jpeg",
@@ -532,9 +301,9 @@ export async function extractQuotationFromUpload(
     }
 
     // Keep the original file on record — this quotation is sourced from an
-    // externally-built document, not Salesforce, so the document itself is
-    // the closest thing to a "quote number of record" it has. Same bucket
-    // and path convention as invoices/actions.ts's uploadExternalQuoteFile.
+    // externally-built document, so the document itself is the closest
+    // thing to a "quote number of record" it has. Same bucket and path
+    // convention as invoices/actions.ts's uploadExternalQuoteFile.
     const sourceFilePath = `${user.id}/${randomUUID()}-${file.name}`;
     const { error: uploadError } = await supabase.storage
       .from("external-quotes")

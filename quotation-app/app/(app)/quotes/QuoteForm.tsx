@@ -416,7 +416,7 @@ export default function QuoteForm({
         id="title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="e.g. Website Redesign — used to name the Salesforce Opportunity"
+        placeholder="e.g. Website Redesign"
       />
 
       <label htmlFor="notes">Notes</label>

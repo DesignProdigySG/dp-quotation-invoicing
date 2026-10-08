@@ -21,8 +21,6 @@ import {
 import type { Json } from "@/types/database.types";
 import { getXeroClientForConnection } from "@/lib/xero/client";
 import { listTaxRates, listAccounts } from "@/lib/xero/settings";
-import { getSalesforceClientForConnection } from "@/lib/salesforce/client";
-import { findOpportunityFieldByLabel } from "@/lib/salesforce/opportunityFields";
 import { extractPoFromEmail } from "@/lib/email-po/extractPoFromEmail";
 import { fuzzyMatchDocumentForPo, type DocumentCandidate } from "@/lib/email-po/fuzzyMatchDocumentForPo";
 import { insertUnmatchedPo } from "@/lib/email-po/insertUnmatchedPo";
@@ -63,7 +61,6 @@ export async function listGmailLabels() {
 export type ProfileInput = {
   full_name: string;
   title: string;
-  dp_bubble?: string | null;
 };
 
 export async function saveProfile(input: ProfileInput): Promise<{ error?: string }> {
@@ -73,7 +70,6 @@ export async function saveProfile(input: ProfileInput): Promise<{ error?: string
       owner_id: user.id,
       full_name: input.full_name || null,
       title: input.title || null,
-      dp_bubble: input.dp_bubble || null,
       updated_at: new Date().toISOString(),
     });
     if (error) return { error: error.message };
@@ -81,31 +77,6 @@ export async function saveProfile(input: ProfileInput): Promise<{ error?: string
     return {};
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Unknown error" };
-  }
-}
-
-const DP_BUBBLE_FIELD_LABEL = "Opportunity Owner (Custom)";
-
-export async function getDpBubbleOptions(): Promise<{
-  options: { value: string; label: string }[];
-  error?: string;
-}> {
-  try {
-    const { conn } = await getSalesforceClientForConnection();
-    const field = await findOpportunityFieldByLabel(conn, DP_BUBBLE_FIELD_LABEL);
-    if (!field) {
-      return {
-        options: [],
-        error: `Could not find the "${DP_BUBBLE_FIELD_LABEL}" field in Salesforce`,
-      };
-    }
-    return {
-      options: field.picklistValues
-        .filter((pv) => pv.active)
-        .map((pv) => ({ value: pv.value, label: pv.label })),
-    };
-  } catch (e) {
-    return { options: [], error: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 
@@ -292,27 +263,6 @@ export async function disconnectXero(): Promise<{ error?: string }> {
       .update({
         tenant_id: null,
         tenant_name: null,
-        refresh_token_encrypted: null,
-        connected_by: null,
-        connected_at: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", 1);
-    if (error) return { error: error.message };
-    revalidatePath("/settings");
-    return {};
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "Unknown error" };
-  }
-}
-
-export async function disconnectSalesforce(): Promise<{ error?: string }> {
-  try {
-    const { supabase } = await requireUser();
-    const { error } = await supabase
-      .from("salesforce_connections")
-      .update({
-        instance_url: null,
         refresh_token_encrypted: null,
         connected_by: null,
         connected_at: null,

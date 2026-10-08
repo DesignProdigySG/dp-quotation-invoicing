@@ -1661,3 +1661,68 @@ new failure: the link now correctly reached the real domain, but landed on
   live** — the link in the screenshot that surfaced this bug is already
   burned either way, so testing needs a freshly-requested reset email; see
   `docs/cherylhandoff.md`.
+
+## Decision 33: Salesforce integration removed — Stage 1 (code + quote-number continuity)
+
+Confirmed directly with the user: nobody actually checks the Salesforce
+side of this (Account/Opportunity/Closed-Won pipeline) after a quote is
+pushed. That means the whole integration (Decisions 14-19) was providing
+zero real value while carrying genuine fragility — three separate rounds
+of live-debugged org-config surprises already (Decisions 16-18) — and a
+single-point-of-failure dependency for creating quotes at all, since the
+push was the only thing writing a final `quote_number`. Decision: remove
+the integration entirely, in two stages. This is Stage 1 — code removal
+and number-generation continuity. Stage 2 (dropping the now-dead
+`salesforce_*` columns/table) is a separate, later migration, deliberately
+isolated since it's destructive and this gives Stage 1 time to prove
+nothing else depended on those columns first.
+
+- **Quote numbers already self-generated locally** via the existing
+  `trg_set_quote_number`/`set_quote_number()` trigger —
+  `pushQuotationToSalesforce` was just overwriting that value afterward
+  with Salesforce's own `Custom_quote_number__c`. Removing the push doesn't
+  leave a numbering gap; it stops something from clobbering a mechanism
+  that already existed.
+- **New quote numbers continue Salesforce's old numbering visually**
+  rather than reverting to the trigger's pre-existing `Q-YYYY-NNNN`
+  format. Checked real production data directly: every live
+  Salesforce-sourced `quote_number` is `Q-` + a flat 7-digit integer,
+  incrementing by 1 with no date-reset (`Q-2608902` → `Q-2608910` across
+  Aug 25-26). Migration
+  `20261008093151_quote_number_continue_from_salesforce.sql`
+  fast-forwards `quote_number_seq` to `2608910` and rewrites
+  `set_quote_number()` to `'Q-' || lpad(nextval(...)::text, 7, '0')`.
+  Verified on staging: a test insert produced `Q-2608911` exactly as
+  designed.
+- **The AI auto-title feature (`generateQuotationTitle.ts`) was let go**,
+  not rewired elsewhere — it existed solely as a fallback name for the
+  Salesforce Opportunity, a trigger point that no longer exists.
+  `quotations.title` itself stays as a plain manual field.
+- **Removed in full**: `lib/salesforce/` (6 files), the OAuth connect
+  routes, `SalesforceSettings.tsx`, `SalesforceAccountPicker.tsx`,
+  `pushQuotationToSalesforce` and the Opportunity-delete block inside
+  `deleteQuotation` (`quotes/actions.ts`), all 4
+  `syncOpportunityStageForInvoice` call sites (3 in `invoices/actions.ts`,
+  1 in `review/purchase-orders/actions.ts`), the "DP Bubble" profile field
+  and `getDpBubbleOptions`/`disconnectSalesforce` (`settings/actions.ts`,
+  `ProfileForm.tsx`, `settings/page.tsx`), the Salesforce Account picker on
+  the client form, the Opportunity hyperlink/nudge on the quotes list and
+  detail pages, and the `jsforce` dependency. The help chatbot's FAQ
+  content (`lib/help-chat/askHelpChat.ts`) was reworded to match.
+- **Schema left alone this round** — `salesforce_*` columns on
+  `clients`/`quotations`/`profiles` and the `salesforce_connections` table
+  still exist, just unused by any code now. Dropping them is Stage 2.
+- **Now-vestigial Vercel env vars**, safe to delete by hand once Stage 1 is
+  live: `SALESFORCE_CLIENT_ID`, `SALESFORCE_CLIENT_SECRET`,
+  `SALESFORCE_REDIRECT_URI`, `SALESFORCE_TOKEN_ENCRYPTION_KEY`,
+  `SALESFORCE_LOGIN_URL`.
+- **Numbering collision note**: this is also "Decision 33" on the
+  `docs/db-safety-ground-rules` branch (PR #39, DB safety ground rules —
+  unrelated content, same next-available number since both branched from
+  the same point on `main`). Whichever of the two merges second needs
+  renumbering, same as Decision 18's precedent.
+- **Verification**: `npx tsc --noEmit` and `npm run build` both clean (27
+  routes — down from 29, the two Salesforce OAuth routes gone). Migration
+  applied to staging (`zisxldwvwwddyuorbhnb`) and verified with a test
+  insert/delete; **not yet applied to production** — that happens on merge
+  to `main` per the staging-first policy in `docs/DB_SAFETY_PRACTICES.md`.
