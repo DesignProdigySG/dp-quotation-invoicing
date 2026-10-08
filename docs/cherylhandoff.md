@@ -304,3 +304,26 @@ a pool picker into quotation/invoice creation, deposit only counts once
 4. Once Tier 1 is confirmed solid on staging, formalize this whole section
    into `docs/POOLS_AND_DRAWS_DESIGN.md` proper (this handoff note is the
    working copy until then).
+
+## Open item: `money_mountain_init` and friends — production-only tables with no trace in this repo (2026-10-08)
+
+While writing up DB safety ground rules (`docs/DECISIONS.md` Decision 33,
+`docs/DB_SAFETY_PRACTICES.md`), found that production has 13 migrations
+staging doesn't, starting with `money_mountain_init`, backing 4 real tables
+(`media_budgets`, `vendor_purchase_orders`, `vendor_invoices` — 332 rows,
+`media_campaign_reconciliation`) with zero migration file, zero app code,
+zero commit history anywhere in this repo. Schema shape (`coupa_account`,
+`po_number`) strongly suggests this is the EQX Coupa PO-Invoicing n8n flow
+writing directly into this same Supabase project as its backing store —
+**not confirmed**, just the most plausible read of the evidence.
+
+Needs an actual human answer, not another guess from schema alone:
+- Confirm with Cheryl/the user what `money_mountain_init` actually is and
+  who/what writes to these tables.
+- Decide whether staging needs equivalent tables (if this is meant to be
+  part of this app's own pipeline going forward) or whether it's
+  intentionally a separate system outside the staging-first policy's scope
+  (if it's genuinely the n8n flow's own infrastructure).
+- Either way, document the answer here or in `docs/DECISIONS.md` once
+  known — don't let this sit as an open question indefinitely given it's
+  332 real rows of vendor-invoice data.
