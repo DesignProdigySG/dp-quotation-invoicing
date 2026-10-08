@@ -8,7 +8,6 @@ import {
   deleteClientRecord,
   type ClientInput,
 } from "./actions";
-import SalesforceAccountPicker from "./SalesforceAccountPicker";
 
 export default function ClientForm({
   clientId,
@@ -32,7 +31,6 @@ export default function ClientForm({
     default_payment_terms_days: number | null;
     default_management_fee_rate: number | null;
     display_currency_preference: "original" | "sgd";
-    salesforce_account_id: string | null;
   };
   const [form, setForm] = useState<FormState>({
     name: initial?.name || "",
@@ -47,7 +45,6 @@ export default function ClientForm({
     default_management_fee_rate: initial?.default_management_fee_rate ?? null,
     display_currency_preference:
       (initial?.display_currency_preference as "original" | "sgd") || "original",
-    salesforce_account_id: initial?.salesforce_account_id ?? null,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -216,11 +213,6 @@ export default function ClientForm({
         <option value="original">Show original currency</option>
         <option value="sgd">Show SGD equivalent</option>
       </select>
-
-      <SalesforceAccountPicker
-        value={form.salesforce_account_id}
-        onChange={(id) => setForm({ ...form, salesforce_account_id: id })}
-      />
 
       <div className="actions" style={{ marginTop: 18 }}>
         <button
