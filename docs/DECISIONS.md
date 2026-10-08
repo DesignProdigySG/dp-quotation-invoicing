@@ -1661,3 +1661,37 @@ new failure: the link now correctly reached the real domain, but landed on
   live** — the link in the screenshot that surfaced this bug is already
   burned either way, so testing needs a freshly-requested reset email; see
   `docs/cherylhandoff.md`.
+
+## Decision 33: Production and staging Supabase migrations have diverged — found while writing up DB safety practices
+
+Asked directly what to watch for now that real production data exists
+alongside a staging database. Checking rather than assuming (`list_migrations`
+against both project ids) surfaced a real, already-happened divergence, not
+just a theoretical risk.
+
+- **Staging** (`zisxldwvwwddyuorbhnb`) has two migrations production
+  doesn't: `pools_ledger_tier1`/`pools_ledger_tier3` — Cheryl's client-funds
+  ledger work (`docs/cherylhandoff.md`), tested on staging, never promoted
+  to production.
+- **Production** (`gkkwxjxdcifjuwxgdpug`) has thirteen migrations staging
+  doesn't, starting with `money_mountain_init`, backing four real tables:
+  `media_budgets` (56 rows), `vendor_purchase_orders` (33),
+  `vendor_invoices` (**332 rows**), `media_campaign_reconciliation` (16).
+  None of this has a migration file in
+  `quotation-app/supabase/migrations/`, any app code referencing it, or any
+  mention in a commit on any branch (checked via `git grep`/`git log --all`
+  across the whole repo). It was applied directly against the live
+  database, outside this repo's migration-file-first pipeline entirely.
+- **Confirmed 2026-10-08** (Cheryl, via the user): this is a genuinely
+  separate project of hers, unrelated to the quotation/invoicing app — she
+  was just reusing this same Supabase project as convenient storage for it.
+  Not a part of this Next.js app, and never meant to go through this repo's
+  migration/staging pipeline, so there's no gap here to close. (The earlier
+  guess that it was the EQX Coupa PO-Invoicing n8n flow specifically was
+  speculation from schema shape alone and was never actually confirmed —
+  see `docs/cherylhandoff.md` for the resolved note.)
+- **Resulting conclusion**: this Supabase project is shared infrastructure
+  beyond just this app. "Staging mirrors production" is only reliably true
+  for schema changes that went through *this repo's own* migration files —
+  it does not hold in general, and shouldn't be assumed without checking.
+  Concrete ground rules written up in `docs/DB_SAFETY_PRACTICES.md`.

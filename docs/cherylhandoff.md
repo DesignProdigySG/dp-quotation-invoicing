@@ -304,3 +304,26 @@ a pool picker into quotation/invoice creation, deposit only counts once
 4. Once Tier 1 is confirmed solid on staging, formalize this whole section
    into `docs/POOLS_AND_DRAWS_DESIGN.md` proper (this handoff note is the
    working copy until then).
+
+## Resolved: `money_mountain_init` and friends — confirmed unrelated to this app (2026-10-08)
+
+While writing up DB safety ground rules (`docs/DECISIONS.md` Decision 33,
+`docs/DB_SAFETY_PRACTICES.md`), found that production has 13 migrations
+staging doesn't, starting with `money_mountain_init`, backing 4 real tables
+(`media_budgets`, `vendor_purchase_orders`, `vendor_invoices` — 332 rows,
+`media_campaign_reconciliation`) with zero migration file, zero app code,
+zero commit history anywhere in this repo.
+
+**Confirmed directly with Cheryl (via the user)**: this is a genuinely
+separate project of hers — she was just reusing this same Supabase project
+as convenient storage for it. It has nothing to do with the quotation/
+invoicing app. (The earlier guess that this was the EQX Coupa PO-Invoicing
+n8n flow was speculation from schema shape alone and was never actually
+confirmed — don't carry that detail forward as fact.)
+
+**Practical upshot**: no action needed on staging parity — this was never
+meant to go through this app's migration-file/staging pipeline, so there's
+no gap to close. Keep treating any table without a migration file in
+`quotation-app/supabase/migrations/` as foreign per
+`docs/DB_SAFETY_PRACTICES.md` Rule 3 — this confirms that's the right
+instinct in general, even though this specific instance turned out benign.
